@@ -1,8 +1,8 @@
 import { getTournamentData } from "@/lib/tournaments";
 import { Medal, Sparkles, Trophy } from "lucide-react";
 
-export default function ChampionsPage() {
-  const { champions } = getTournamentData();
+export default async function ChampionsPage() {
+  const { champions } = await getTournamentData();
   return (
     <div className="champions-page">
       <header className="champions-hero"><Sparkles /><span>Intra SWE Sports Week 2026</span><h1>Hall of<br /><em>Champions</em></h1><p>The names, teams, and moments that defined the week.</p></header>

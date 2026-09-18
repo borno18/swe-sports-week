@@ -4,7 +4,7 @@ import { eventDays, getEventDay } from "@/lib/data";
 import { getTournamentData } from "@/lib/tournaments";
 
 export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ day?: string; match?: string }> }) {
-  const { matches } = getTournamentData();
+  const { matches } = await getTournamentData();
   const { day, match } = await searchParams;
   const selectedMatch = matches.find(item => item.id === match);
   const requestedDay = Number(day);

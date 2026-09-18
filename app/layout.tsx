@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   description: "The live tournament hub for Intra SWE Sports Week, SUST.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { sports, matches } = getTournamentData();
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const { sports, matches } = await getTournamentData();
   return (
     <html lang="en">
       <body>

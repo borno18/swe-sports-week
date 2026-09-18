@@ -39,10 +39,14 @@ function LoginForm({ error }: { error?: string }) {
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
-  const [user, params] = await Promise.all([getCurrentAdmin(), searchParams]);
+  const [user, params, tournamentData] = await Promise.all([
+    getCurrentAdmin(),
+    searchParams,
+    getTournamentData(),
+  ]);
   if (!user) return <LoginForm error={params.error} />;
 
-  const { tournaments, matches } = getTournamentData();
+  const { tournaments, matches } = tournamentData;
   const selected = tournaments.find(t => t.id === params.section) ?? tournaments[0];
   const published = tournaments.filter(t => t.bracket.rounds.length);
   const canEditLineup = user.role !== "RESULT_MANAGER";

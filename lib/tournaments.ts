@@ -1,18 +1,19 @@
 import "server-only";
 import { cache } from "react";
-import { getDatabase } from "@/lib/db";
+import { ensureDatabaseInitialized } from "@/lib/db";
 import { sports as catalog, eventDays, type Match, type Champion } from "@/lib/data";
 import { championOf, roundName } from "@/lib/bracket";
 import { initializeTournaments, listTournaments } from "@/lib/tournament-store";
 
-export function tournamentDatabase() {
-  const db = getDatabase();
-  initializeTournaments(db, catalog);
+export async function tournamentDatabase() {
+  const db = await ensureDatabaseInitialized();
+  await initializeTournaments(db, catalog);
   return db;
 }
 
-export const getTournamentData = cache(() => {
-  const tournaments = listTournaments(tournamentDatabase());
+export const getTournamentData = cache(async () => {
+  const db = await tournamentDatabase();
+  const tournaments = await listTournaments(db);
   const matches: Match[] = [];
   const champions: Champion[] = [];
   for (const tournament of tournaments) {

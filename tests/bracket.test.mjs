@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
+import { createClient } from '@libsql/client';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -53,24 +53,42 @@ test('renaming preserves identity and all published results', () => {
   assert.throws(() => renameEntries(b,'A\nB\nC'), /same number/);
 });
 
-test('persistent storage, stale saves, rollback, section isolation and undo are atomic', () => {
+test('persistent storage, stale saves, rollback, section isolation and undo are atomic', async () => {
   const directory = mkdtempSync(join(tmpdir(),'sports-week-test-'));
   const path = join(directory,'test.db');
-  let db = new DatabaseSync(path);
+  let db = createClient({ url: `file:${path}` });
   try {
-    initializeTournaments(db,[{slug:'dart',name:'Dart'},{slug:'chess',name:'Chess'}]);
-    mutateTournament(db,'dart',0,'test-admin',{kind:'lineup',names:'Alice\nBob\nCarol'});
-    assert.throws(() => mutateTournament(db,'dart',0,'test-admin',{kind:'reset'}), /Another update/);
-    assert.throws(() => mutateTournament(db,'dart',1,'test-admin',{kind:'winner',matchId:'r2m1',entryId:'p1'}), /Both opponents/);
-    assert.equal(listTournaments(db).find(t=>t.id==='dart').version,1);
-    mutateTournament(db,'dart',1,'test-admin',{kind:'winner',matchId:'r1m1',entryId:'p2'});
-    mutateTournament(db,'dart',2,'test-admin',{kind:'winner',matchId:'r2m1',entryId:'p2'});
-    db.close(); db = new DatabaseSync(path);
-    const saved = listTournaments(db).find(t=>t.id==='dart');
+    await db.execute(`CREATE TABLE IF NOT EXISTS tournaments (
+      id TEXT PRIMARY KEY, sport_slug TEXT NOT NULL, title TEXT NOT NULL COLLATE NOCASE,
+      entry_kind TEXT NOT NULL CHECK(entry_kind IN ('player','team')), version INTEGER NOT NULL DEFAULT 0,
+      bracket TEXT NOT NULL, UNIQUE(sport_slug, title)
+    )`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS tournament_changes (
+      id TEXT PRIMARY KEY, tournament_id TEXT NOT NULL, actor_id TEXT NOT NULL,
+      action TEXT NOT NULL, previous_bracket TEXT NOT NULL, created_at INTEGER NOT NULL
+    )`);
+    await initializeTournaments(db,[{slug:'dart',name:'Dart'},{slug:'chess',name:'Chess'}]);
+    await mutateTournament(db,'dart',0,'test-admin',{kind:'lineup',names:'Alice\nBob\nCarol'});
+    await assert.rejects(async () => mutateTournament(db,'dart',0,'test-admin',{kind:'reset'}), /Another update/);
+    await assert.rejects(async () => mutateTournament(db,'dart',1,'test-admin',{kind:'winner',matchId:'r2m1',entryId:'p1'}), /Both opponents/);
+    const list1 = await listTournaments(db);
+    assert.equal(list1.find(t=>t.id==='dart').version,1);
+    await mutateTournament(db,'dart',1,'test-admin',{kind:'winner',matchId:'r1m1',entryId:'p2'});
+    await mutateTournament(db,'dart',2,'test-admin',{kind:'winner',matchId:'r2m1',entryId:'p2'});
+    db.close(); db = createClient({ url: `file:${path}` });
+    const list2 = await listTournaments(db);
+    const saved = list2.find(t=>t.id==='dart');
     assert.equal(championOf(saved.bracket).winner.name,'Bob');
-    assert.equal(listTournaments(db).find(t=>t.id==='chess').bracket.entries.length,0);
-    assert.equal(db.prepare('SELECT count(*) AS n FROM tournament_changes').get().n,3);
-    mutateTournament(db,'dart',3,'test-admin',{kind:'winner',matchId:'r1m1',entryId:null});
-    assert.equal(championOf(listTournaments(db).find(t=>t.id==='dart').bracket),null);
-  } finally { db.close(); rmSync(directory,{recursive:true,force:true}); }
+    assert.equal(list2.find(t=>t.id==='chess').bracket.entries.length,0);
+    const countRes = await db.execute('SELECT count(*) AS n FROM tournament_changes');
+    assert.equal(Number(countRes.rows[0].n),3);
+    await mutateTournament(db,'dart',3,'test-admin',{kind:'winner',matchId:'r1m1',entryId:null});
+    const list3 = await listTournaments(db);
+    assert.equal(championOf(list3.find(t=>t.id==='dart').bracket),null);
+  } finally {
+    db.close();
+    try {
+      rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    } catch {}
+  }
 });

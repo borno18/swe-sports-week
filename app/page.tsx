@@ -7,8 +7,8 @@ import { SportCard } from "@/components/sport-card";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { EventCountdown } from "@/components/event-countdown";
 
-export default function Home() {
-  const { sports, tournaments, matches, champions } = getTournamentData();
+export default async function Home() {
+  const { sports, tournaments, matches, champions } = await getTournamentData();
   const published = tournaments.filter(t => t.bracket.rounds.length);
   const completed = matches.filter(m => m.status === "completed");
   const recent = [...completed].sort((a,b) => (b.completedAt ?? 0) - (a.completedAt ?? 0)).slice(0, 2);

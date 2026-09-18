@@ -15,11 +15,11 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
   const kind = field(form, "kind");
   if (admin.role === "RESULT_MANAGER" && !["winner", "details"].includes(kind)) return { ok: false, message: "Only tournament organizers can edit lineups or reset brackets." };
   try {
-    const db = tournamentDatabase();
+    const db = await tournamentDatabase();
     if (kind === "create") {
       const sport = field(form, "sport");
       if (!sports.some(item => item.slug === sport)) return { ok: false, message: "Choose a valid sport." };
-      const id = addTournament(db, sport, field(form, "title"), field(form, "entryKind"));
+      const id = await addTournament(db, sport, field(form, "title"), field(form, "entryKind"));
       revalidatePath("/", "layout");
       return { ok: true, message: "Section created. Add its players or teams below.", id };
     }
@@ -33,12 +33,11 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
       case "details": mutation = { kind, matchId: field(form, "matchId"), date: field(form, "date"), time: field(form, "time"), venue: field(form, "venue"), scoreA: field(form, "scoreA"), scoreB: field(form, "scoreB") }; break;
       default: return { ok: false, message: "Unknown action." };
     }
-    mutateTournament(db, field(form, "id"), Number(field(form, "version")), admin.id, mutation);
+    await mutateTournament(db, field(form, "id"), Number(field(form, "version")), admin.id, mutation);
     revalidatePath("/", "layout");
     return { ok: true, message: kind === "winner" ? (field(form, "entryId") ? "Winner saved and advanced. The public bracket is updated." : "Result undone. Dependent results have been cleared.") : "Saved. The public website is updated." };
   } catch (error) {
-    // Domain errors are safe to display; never expose database internals.
-    const message = error instanceof Error && !/SQLITE|constraint|database/i.test(error.message) ? error.message : "Could not save. Please refresh and try again.";
+    const message = error instanceof Error && !/SQLITE|constraint|database|libsql/i.test(error.message) ? error.message : "Could not save. Please refresh and try again.";
     return { ok: false, message };
   }
 }

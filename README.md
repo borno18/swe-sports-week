@@ -46,12 +46,17 @@ The homepage counts down to **26 September 2026, 12:00 AM Bangladesh time**. Cha
 
 ## Persistence and hosting
 
-Tournament data, accounts, sessions, and change history are stored in `data/sports-week.db`. Back up the database using SQLite's backup tooling. This app needs a **persistent writable disk and a single application instance**; an ephemeral serverless filesystem will not preserve tournament data. PostgreSQL can replace SQLite for multi-instance hosting (see `docs/architecture.md`).
+Tournament data, accounts, sessions, and change history are stored via `@libsql/client` (SQLite).
 
-Optional environment variables:
+### Hosting on Vercel (Recommended)
+This site can be hosted 100% free on **Vercel** with persistent data using **Turso** (Serverless cloud SQLite):
+1. In your Vercel Project Settings -> **Environment Variables**, add:
+   - `TURSO_DATABASE_URL`: `libsql://your-database.turso.io`
+   - `TURSO_AUTH_TOKEN`: your Turso auth token
+2. Deploy! Every server action and page will connect securely to Turso. Data persists permanently across deployments and container restarts with zero cold starts.
 
-- `SPORTS_WEEK_DATABASE_PATH`: use a different SQLite database file (for example, a mounted persistent disk or an isolated test database).
-- `SPORTS_WEEK_BUILD_DIR`: separate Next.js output directory for isolated browser tests. Defaults to `.next`.
+### Local & Fallback
+If `TURSO_DATABASE_URL` is not specified, the app falls back to a local SQLite database file at `data/sports-week.db` (or `SPORTS_WEEK_DATABASE_PATH`).
 
 Every write verifies the admin session on the server. Result managers can record winners and match details; tournament organizers can also manage lineups. Version checks reject stale edits. Result propagation and change history are saved in one transaction.
 

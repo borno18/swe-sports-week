@@ -8,4 +8,5 @@ data/*.db-wal
 .dev-server*.log
 .dev-server.pid
 .env*
+!.env.example
 artifacts/

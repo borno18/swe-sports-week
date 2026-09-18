@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Client } from "@libsql/client";
 import { randomUUID } from "node:crypto";
 import { chooseWinner, createBracket, renameEntries, type Tournament, type Bracket } from "./bracket.ts";
 
@@ -9,45 +9,76 @@ export type Mutation =
   | { kind: "reset" }
   | { kind: "details"; matchId: string; date: string; time: string; venue: string; scoreA: string; scoreB: string };
 
-export function initializeTournaments(db: DatabaseSync, catalog: { slug: string; name: string }[]) {
-  db.exec(`CREATE TABLE IF NOT EXISTS tournaments (
-    id TEXT PRIMARY KEY, sport_slug TEXT NOT NULL, title TEXT NOT NULL COLLATE NOCASE,
-    entry_kind TEXT NOT NULL CHECK(entry_kind IN ('player','team')), version INTEGER NOT NULL DEFAULT 0,
-    bracket TEXT NOT NULL, UNIQUE(sport_slug, title)
-  );
-  CREATE TABLE IF NOT EXISTS tournament_changes (
-    id TEXT PRIMARY KEY, tournament_id TEXT NOT NULL, actor_id TEXT NOT NULL,
-    action TEXT NOT NULL, previous_bracket TEXT NOT NULL, created_at INTEGER NOT NULL
-  );`);
-  const insert = db.prepare("INSERT OR IGNORE INTO tournaments(id,sport_slug,title,entry_kind,bracket) VALUES(?,?,?,?,?)");
-  for (const sport of catalog) insert.run(sport.slug, sport.slug, sport.name, ["football", "cricket"].includes(sport.slug) ? "team" : "player", JSON.stringify({ entries: [], rounds: [] }));
+export async function initializeTournaments(db: Client, catalog: { slug: string; name: string }[]) {
+  const existing = await db.execute("SELECT id, sport_slug, title FROM tournaments");
+  const existingSet = new Set(existing.rows.map(r => `${String(r.sport_slug)}:${String(r.title).toLowerCase()}`));
+  const missing = catalog.filter(sport => !existingSet.has(`${sport.slug}:${sport.name.toLowerCase()}`));
+
+  if (missing.length > 0) {
+    await db.batch(
+      missing.map(sport => ({
+        sql: "INSERT OR IGNORE INTO tournaments(id,sport_slug,title,entry_kind,bracket) VALUES(?,?,?,?,?)",
+        args: [
+          sport.slug,
+          sport.slug,
+          sport.name,
+          ["football", "cricket"].includes(sport.slug) ? "team" : "player",
+          JSON.stringify({ entries: [], rounds: [] }),
+        ],
+      })),
+      "write"
+    );
+  }
 }
 
 function decode(row: Row): Tournament {
-  return { id: row.id, sportSlug: row.sport_slug, title: row.title, entryKind: row.entry_kind, version: row.version, bracket: JSON.parse(row.bracket) as Bracket };
+  return {
+    id: String(row.id),
+    sportSlug: String(row.sport_slug),
+    title: String(row.title),
+    entryKind: row.entry_kind as "player" | "team",
+    version: Number(row.version),
+    bracket: JSON.parse(String(row.bracket)) as Bracket,
+  };
 }
 
-export function listTournaments(db: DatabaseSync) {
-  return (db.prepare("SELECT * FROM tournaments ORDER BY rowid").all() as Row[]).map(decode);
+export async function listTournaments(db: Client): Promise<Tournament[]> {
+  const res = await db.execute("SELECT * FROM tournaments ORDER BY rowid");
+  return (res.rows as unknown as Row[]).map(decode);
 }
 
-export function addTournament(db: DatabaseSync, sportSlug: string, title: string, entryKind: string) {
+export async function addTournament(db: Client, sportSlug: string, title: string, entryKind: string): Promise<string> {
   title = title.trim();
   if (!title || title.length > 80 || /[\u0000-\u001f]/.test(title)) throw new Error("Enter a section name of 1–80 characters.");
   if (!["player", "team"].includes(entryKind)) throw new Error("Choose players or teams.");
-  if (db.prepare("SELECT id FROM tournaments WHERE sport_slug = ? AND title = ? COLLATE NOCASE").get(sportSlug, title)) throw new Error("A section with this name already exists for this sport.");
+  
+  const existing = await db.execute({
+    sql: "SELECT id FROM tournaments WHERE sport_slug = ? AND title = ? COLLATE NOCASE",
+    args: [sportSlug, title],
+  });
+  if (existing.rows.length > 0) throw new Error("A section with this name already exists for this sport.");
+  
   const id = randomUUID();
-  db.prepare("INSERT INTO tournaments(id,sport_slug,title,entry_kind,bracket) VALUES(?,?,?,?,?)").run(id, sportSlug, title, entryKind, JSON.stringify({ entries: [], rounds: [] }));
+  await db.execute({
+    sql: "INSERT INTO tournaments(id,sport_slug,title,entry_kind,bracket) VALUES(?,?,?,?,?)",
+    args: [id, sportSlug, title, entryKind, JSON.stringify({ entries: [], rounds: [] })],
+  });
   return id;
 }
 
-export function mutateTournament(db: DatabaseSync, id: string, version: number, actor: string, mutation: Mutation) {
+export async function mutateTournament(db: Client, id: string, version: number, actor: string, mutation: Mutation): Promise<Tournament> {
   if (!Number.isSafeInteger(version) || version < 0) throw new Error("Invalid version. Refresh and try again.");
-  db.exec("BEGIN IMMEDIATE");
+  
+  const tx = await db.transaction("write");
   try {
-    const row = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(id) as Row | undefined;
+    const res = await tx.execute({
+      sql: "SELECT * FROM tournaments WHERE id = ?",
+      args: [id],
+    });
+    const row = res.rows[0] as unknown as Row | undefined;
     if (!row) throw new Error("Section not found.");
-    if (row.version !== version) throw new Error("Another update was saved. Refresh this page before trying again.");
+    if (Number(row.version) !== version) throw new Error("Another update was saved. Refresh this page before trying again.");
+    
     let bracket = decode(row).bracket;
     switch (mutation.kind) {
       case "lineup":
@@ -68,9 +99,19 @@ export function mutateTournament(db: DatabaseSync, id: string, version: number, 
         break;
       }
     }
-    db.prepare("UPDATE tournaments SET bracket = ?, version = version + 1 WHERE id = ?").run(JSON.stringify(bracket), id);
-    db.prepare("INSERT INTO tournament_changes(id,tournament_id,actor_id,action,previous_bracket,created_at) VALUES(?,?,?,?,?,?)").run(randomUUID(), id, actor, mutation.kind, row.bracket, Date.now());
-    db.exec("COMMIT");
-    return { ...decode(row), bracket, version: row.version + 1 };
-  } catch (error) { db.exec("ROLLBACK"); throw error; }
+    
+    await tx.execute({
+      sql: "UPDATE tournaments SET bracket = ?, version = version + 1 WHERE id = ?",
+      args: [JSON.stringify(bracket), id],
+    });
+    await tx.execute({
+      sql: "INSERT INTO tournament_changes(id,tournament_id,actor_id,action,previous_bracket,created_at) VALUES(?,?,?,?,?,?)",
+      args: [randomUUID(), id, actor, mutation.kind, String(row.bracket), Date.now()],
+    });
+    await tx.commit();
+    return { ...decode(row), bracket, version: Number(row.version) + 1 };
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  }
 }

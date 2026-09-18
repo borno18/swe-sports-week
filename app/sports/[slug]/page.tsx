@@ -6,7 +6,7 @@ import { TournamentBracket } from "@/components/tournament-bracket";
 
 export default async function SportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const { sports, tournaments } = getTournamentData();
+  const { sports, tournaments } = await getTournamentData();
   const sport = sports.find(item => item.slug === slug);
   if (!sport) notFound();
   const sections = tournaments.filter(t => t.sportSlug === slug);
