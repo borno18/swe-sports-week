@@ -1,0 +1,10 @@
+node_modules/
+.next/
+*.tsbuildinfo
+.tools/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+.dev-server*.log
+.dev-server.pid
+.env*
