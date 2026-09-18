@@ -1,18 +1,20 @@
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarDays, MapPin, Trophy, Users } from "lucide-react";
+import { ArrowLeft, CalendarDays, Trophy, Users } from "lucide-react";
 import Link from "next/link";
-import { matches, sports } from "@/lib/data";
-import { MatchCard } from "@/components/match-card";
+import { getTournamentData } from "@/lib/tournaments";
+import { TournamentBracket } from "@/components/tournament-bracket";
 
 export default async function SportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const sport = sports.find((item) => item.slug === slug);
+  const { sports, tournaments } = getTournamentData();
+  const sport = sports.find(item => item.slug === slug);
   if (!sport) notFound();
-  const sportMatches = matches.filter((match) => match.sport === sport.name);
-  return (
-    <div className="sport-page" style={{ "--sport-color": sport.color } as React.CSSProperties}>
-      <header className="sport-hero"><Link href="/sports"><ArrowLeft size={16} /> All sports</Link><div className="sport-hero-icon">{sport.icon}</div><span>{sport.category} tournament</span><h1>{sport.name}</h1><p>{sport.detail} · {sport.stage}</p><div className="sport-summary"><span><Users /> <b>{sport.participants}</b> Competitors</span><span><CalendarDays /> <b>{sport.matches}</b> Matches</span><span><Trophy /> <b>{sport.stage}</b> Current stage</span></div></header>
-      <div className="page-shell compact"><section className="content-section"><div className="section-heading"><div><span className="eyebrow">Tournament pulse</span><h2>Current matches</h2></div></div><div className="match-grid">{sportMatches.length ? sportMatches.map((match) => <MatchCard key={match.id} match={match} />) : <div className="empty-state"><span>{sport.icon}</span><h3>Fixtures coming soon</h3><p>The tournament draw will appear here once published.</p></div>}</div></section><section className="bracket-preview"><div><span className="eyebrow">Knockout path</span><h2>Road to the final</h2></div><div className="bracket-round"><small>Quarter Final</small><span>Match 1 <b>TBD</b></span><span>Match 2 <b>TBD</b></span></div><div className="bracket-round"><small>Semi Final</small><span>Winner M1 <b>—</b></span></div><div className="bracket-round final"><small>Final</small><span><Trophy size={17} /> Championship <b>—</b></span></div></section></div>
+  const sections = tournaments.filter(t => t.sportSlug === slug);
+  return <div className="sport-page" style={{ "--sport-color": sport.color } as React.CSSProperties}>
+    <header className="sport-hero"><Link href="/sports"><ArrowLeft size={16} /> All sports</Link><div className="sport-hero-icon">{sport.icon}</div><span>{sport.category} tournament</span><h1>{sport.name}</h1><p>{sport.detail} · {sport.stage}</p><div className="sport-summary"><span><Users /> <b>{sport.participants}</b> Players / teams</span><span><CalendarDays /> <b>{sport.matches}</b> Matches</span><span><Trophy /> Single elimination</span></div></header>
+    <div className="public-brackets"><div className="section-heading"><div><span className="eyebrow">From the first round to the final</span><h2>Tournament brackets</h2></div><span className="update-label">Updates automatically · every 10 seconds</span></div>
+      {sections.length > 1 && <nav className="filter-row" aria-label="Sport sections">{sections.map(t => <a key={t.id} className="filter" href={`#section-${t.id}`}>{t.title}</a>)}</nav>}
+      {sections.map(t => <section className="public-bracket-section" id={`section-${t.id}`} key={t.id}><h2>{t.title}</h2><p className="result-count">{t.bracket.entries.length} {t.entryKind === "team" ? "teams / pairs" : "players"}</p><TournamentBracket tournament={t} /></section>)}
     </div>
-  );
+  </div>;
 }

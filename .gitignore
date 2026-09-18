@@ -8,3 +8,4 @@ data/*.db-wal
 .dev-server*.log
 .dev-server.pid
 .env*
+artifacts/

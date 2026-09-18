@@ -1,18 +1,18 @@
 import "server-only";
 
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const dataDirectory = join(process.cwd(), "data");
-const databasePath = join(dataDirectory, "sports-week.db");
+const databasePath = process.env.SPORTS_WEEK_DATABASE_PATH || join(dataDirectory, "sports-week.db");
 
 declare global {
   var sportsWeekDatabase: DatabaseSync | undefined;
 }
 
 function createDatabase() {
-  mkdirSync(dataDirectory, { recursive: true });
+  mkdirSync(dirname(databasePath), { recursive: true });
   const database = new DatabaseSync(databasePath);
   database.exec("PRAGMA journal_mode = WAL");
   database.exec("PRAGMA foreign_keys = ON");

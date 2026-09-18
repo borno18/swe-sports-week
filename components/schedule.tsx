@@ -4,14 +4,14 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { MatchCard } from "@/components/match-card";
-import { matches, eventDays } from "@/lib/data";
+import { type Match, eventDays, sports } from "@/lib/data";
 import { useEventDay } from "@/components/use-event-day";
 
-const indoorSports = new Set(["Badminton", "Chess", "Table Tennis", "FIFA", "Carrom", "Ludo", "Mini Militia", "Pen Fight", "UNO"]);
+const indoorSports = new Set(sports.filter(sport => sport.category === "Indoor").map(sport => sport.name));
 
 type CategoryFilter = "all" | "indoor" | "outdoor";
 
-export function Schedule({ initialDay, highlightedMatch }: { initialDay: number; highlightedMatch?: string }) {
+export function Schedule({ initialDay, highlightedMatch, matches }: { initialDay: number; highlightedMatch?: string; matches: Match[] }) {
   const dayIndex = initialDay - 1;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -23,7 +23,7 @@ export function Schedule({ initialDay, highlightedMatch }: { initialDay: number;
   const [showMore, setShowMore] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const day = eventDays[dayIndex];
+  const day = eventDays[dayIndex] ?? { short: "Dates to be confirmed", label: "Unscheduled / other dates" };
 
   const filtered = useMemo(() => {
     let result = matches.filter(m => m.day === dayIndex + 1);
@@ -36,7 +36,7 @@ export function Schedule({ initialDay, highlightedMatch }: { initialDay: number;
       result = result.filter(m => m.status === statusFilter);
     }
     return result;
-  }, [dayIndex, category, statusFilter]);
+  }, [dayIndex, category, statusFilter, matches]);
 
   return (
     <div className="page-shell">
@@ -46,11 +46,12 @@ export function Schedule({ initialDay, highlightedMatch }: { initialDay: number;
         <p>Times, venues, opponents, and live status — all in one place.</p>
       </header>
 
+      <div className="filter-row"><button className={`filter ${initialDay !== 0 ? "active" : ""}`} onClick={() => changeDay(today ?? 1)} aria-pressed={initialDay !== 0}>Event dates</button><button className={`filter ${initialDay === 0 ? "active" : ""}`} onClick={() => changeDay(0)} aria-pressed={initialDay === 0}>Unscheduled / other dates · {matches.filter(m => m.day === 0).length}</button></div>
       <div className="date-switcher" aria-busy={pending}>
         <button
           aria-label="Previous day"
           onClick={() => changeDay(initialDay - 1)}
-          disabled={pending || dayIndex === 0}
+          disabled={pending || initialDay <= 1}
         >
           <ChevronLeft />
         </button>
@@ -97,7 +98,7 @@ export function Schedule({ initialDay, highlightedMatch }: { initialDay: number;
           <CalendarDays />
           <div>
             <span>{dayIndex + 1 === today ? "Today · " : ""}{day.short}</span>
-            <h2>{day.label.split(", ")[1]}</h2>
+            <h2>{day.label.split(", ")[1] ?? day.label}</h2>
           </div>
           <b role="status">{filtered.length} {filtered.length === 1 ? "match" : "matches"}</b>
         </div>

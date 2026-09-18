@@ -9,9 +9,10 @@ export function MatchCard({ match, highlighted = false }: { match: Match; highli
         <span className={`status-pill ${match.status}`}>{match.status === "live" && <Radio size={12} />} {match.status}</span>
       </div>
       <p className="match-meta">{match.category} · {match.round}</p>
-      <p className="match-date">{eventDays[match.day - 1]?.label}</p>
+      <p className="match-date">{eventDays[match.day - 1]?.label || match.date || "Date to be confirmed"}</p>
       <div className="score-row"><strong>{match.participantA}</strong>{match.scoreA && <b>{match.scoreA}</b>}</div>
       <div className="score-row"><strong>{match.participantB}</strong>{match.scoreB && <b>{match.scoreB}</b>}</div>
+      {match.winner && <p className="match-winner"><Trophy size={14} /> {match.winner} wins</p>}
       <div className="match-footer"><span><MapPin size={14} />{match.venue}</span><span>{match.status === "completed" ? <Trophy size={14} /> : null}{match.time}</span></div>
     </article>
   );

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "admin:create": "node scripts/create-admin.mjs"
   },
   "dependencies": {

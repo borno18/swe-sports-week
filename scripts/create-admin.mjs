@@ -1,6 +1,6 @@
 import { createHash, randomUUID, scryptSync } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
@@ -13,8 +13,9 @@ if (!email || !password || password.length < 12) {
 }
 
 const dataDirectory = join(process.cwd(), "data");
-mkdirSync(dataDirectory, { recursive: true });
-const database = new DatabaseSync(join(dataDirectory, "sports-week.db"));
+const databasePath = process.env.SPORTS_WEEK_DATABASE_PATH || join(dataDirectory, "sports-week.db");
+mkdirSync(dirname(databasePath), { recursive: true });
+const database = new DatabaseSync(databasePath);
 database.exec(`
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS users (

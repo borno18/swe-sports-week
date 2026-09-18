@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Search, Shield, X } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { matches, sports, announcements } from "@/lib/data";
+import { announcements, type Match, type Sport } from "@/lib/data";
 
 const nav = [
   ["Home", "/"],
@@ -17,7 +17,7 @@ const nav = [
 
 type SearchItem = { icon: string; title: string; subtitle: string; href: string; type: string };
 
-export function SiteHeader() {
+export function SiteHeader({ matches, sports }: { matches: Match[]; sports: Sport[] }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -34,7 +34,7 @@ export function SiteHeader() {
     ...sports.map(s => ({ icon: s.icon, title: s.name, subtitle: `${s.category} tournament · ${s.stage}`, href: `/sports/${s.slug}`, type: "Sport" })),
     ...matches.map(m => ({ icon: m.icon, title: `${m.participantA} vs ${m.participantB}`, subtitle: `${m.sport} · ${m.round} · ${m.venue}`, href: `/schedule?day=${m.day}&match=${m.id}#match-${m.id}`, type: "Match" })),
     ...announcements.map(a => ({ icon: "📢", title: a.title, subtitle: a.body.slice(0, 80), href: "/announcements", type: "Notice" })),
-  ], []);
+  ], [sports, matches]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
