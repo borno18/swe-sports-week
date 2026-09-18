@@ -3,6 +3,7 @@
 import { useRef, useState, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, Trophy, Crown } from "lucide-react";
 import { championOf, roundName, type BracketMatch, type Tournament } from "@/lib/bracket";
+import { sports as catalog } from "@/lib/data";
 
 export function TournamentBracket({ tournament, onWinner, onDetails, busy = false }: {
   tournament: Tournament;
@@ -15,6 +16,9 @@ export function TournamentBracket({ tournament, onWinner, onDetails, busy = fals
   const scrollRef = useRef<HTMLDivElement>(null);
   const entries = new Map(bracket.entries.map(entry => [entry.id, entry.name]));
   const champion = championOf(bracket);
+  const sportObj = catalog.find(s => s.slug === tournament.sportSlug);
+  const sportColor = sportObj?.color || "#72d2ff";
+
   function goTo(index: number) {
     const scroller = scrollRef.current;
     const column = scroller?.querySelectorAll<HTMLElement>(".ko-round")[index];
@@ -22,8 +26,8 @@ export function TournamentBracket({ tournament, onWinner, onDetails, busy = fals
     setActive(index);
     scroller.scrollTo({ left: column.offsetLeft - 18, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }
-  if (!bracket.rounds.length) return <div className="ko-empty"><Trophy strokeWidth={1.5} /><p>Draw not published yet</p><span>The bracket will appear here once the organizer adds the lineup.</span></div>;
-  return <section className="ko" aria-label={`${tournament.title} tournament bracket`}>
+  if (!bracket.rounds.length) return <div className="ko-empty" style={{ "--sport-color": sportColor } as CSSProperties}><Trophy strokeWidth={1.5} /><p>Draw not published yet</p><span>The bracket will appear here once the organizer adds the lineup.</span></div>;
+  return <section className="ko" style={{ "--sport-color": sportColor } as CSSProperties} aria-label={`${tournament.title} tournament bracket`}>
     {champion && <div className="ko-champion"><Crown strokeWidth={1.5} /><div><span>Champion</span><strong>{champion.winner.name}</strong></div><small>Runner-up · {champion.runnerUp.name}</small></div>}
     <div className="ko-nav">
       <button type="button" aria-label="Previous round" disabled={active === 0} onClick={() => goTo(active - 1)}><ChevronLeft size={18} /></button>

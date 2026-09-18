@@ -1,11 +1,18 @@
 import { MapPin, Trophy } from "lucide-react";
-import { eventDays, type Match } from "@/lib/data";
+import { eventDays, sports as catalog, type Match } from "@/lib/data";
 
 export function MatchCard({ match, highlighted = false }: { match: Match; highlighted?: boolean }) {
   const isCompleted = match.status === "completed";
   const hasScores = match.scoreA || match.scoreB;
+  const sportObj = catalog.find(s => s.slug === match.sportSlug || s.name.toLowerCase() === match.sport.toLowerCase());
+  const sportColor = sportObj?.color || "#6266ff";
   return (
-    <article id={`match-${match.id}`} className={`mc${isCompleted ? " mc-done" : ""}${highlighted ? " mc-hl" : ""}`} tabIndex={-1}>
+    <article
+      id={`match-${match.id}`}
+      className={`mc${isCompleted ? " mc-done" : ""}${highlighted ? " mc-hl" : ""}`}
+      style={{ "--sport-color": sportColor } as React.CSSProperties}
+      tabIndex={-1}
+    >
       <div className="mc-top">
         <span className="mc-sport">{match.icon} {match.sport}</span>
         <span className="mc-round">{match.category} · {match.round}</span>
