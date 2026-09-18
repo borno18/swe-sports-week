@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type CSSProperties } from "react";
-import { ChevronLeft, ChevronRight, Trophy, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trophy, Crown } from "lucide-react";
 import { championOf, roundName, type BracketMatch, type Tournament } from "@/lib/bracket";
 
 export function TournamentBracket({ tournament, onWinner, onDetails, busy = false }: {
@@ -17,45 +17,62 @@ export function TournamentBracket({ tournament, onWinner, onDetails, busy = fals
   const champion = championOf(bracket);
   function goTo(index: number) {
     const scroller = scrollRef.current;
-    const column = scroller?.querySelectorAll<HTMLElement>(".knockout-round")[index];
+    const column = scroller?.querySelectorAll<HTMLElement>(".ko-round")[index];
     if (!scroller || !column) return;
     setActive(index);
-    scroller.scrollTo({ left: column.offsetLeft, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    scroller.scrollTo({ left: column.offsetLeft - 18, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }
-  if (!bracket.rounds.length) return <div className="empty-state"><Trophy /><h3>Draw not published yet</h3><p>Players, teams, and their route to the final will appear here once the organizer adds the lineup.</p></div>;
-  return <section className="knockout" aria-label={`${tournament.title} tournament bracket`}>
-    {champion && <div className="bracket-champion"><Trophy aria-hidden="true" /><div><small>Champion</small><strong>{champion.winner.name}</strong></div><span>Runner-up · {champion.runnerUp.name}</span></div>}
-    <div className="round-toolbar">
-      <button type="button" aria-label="Previous round" disabled={active === 0} onClick={() => goTo(active - 1)}><ChevronLeft /></button>
-      <nav className="round-tabs" aria-label="Bracket rounds">
-        {bracket.rounds.map((_, index) => <button type="button" key={index} aria-current={active === index ? "step" : undefined} onClick={() => goTo(index)}>{roundName(index, bracket.rounds.length)}</button>)}
-      </nav>
-      <button type="button" aria-label="Next round" disabled={active >= bracket.rounds.length - 1} onClick={() => goTo(active + 1)}><ChevronRight /></button>
+  if (!bracket.rounds.length) return <div className="ko-empty"><Trophy strokeWidth={1.5} /><p>Draw not published yet</p><span>The bracket will appear here once the organizer adds the lineup.</span></div>;
+  return <section className="ko" aria-label={`${tournament.title} tournament bracket`}>
+    {champion && <div className="ko-champion"><Crown strokeWidth={1.5} /><div><span>Champion</span><strong>{champion.winner.name}</strong></div><small>Runner-up · {champion.runnerUp.name}</small></div>}
+    <div className="ko-nav">
+      <button type="button" aria-label="Previous round" disabled={active === 0} onClick={() => goTo(active - 1)}><ChevronLeft size={18} /></button>
+      <div className="ko-tabs" role="tablist">
+        {bracket.rounds.map((_, index) => <button type="button" role="tab" key={index} aria-selected={active === index} onClick={() => goTo(index)}>{roundName(index, bracket.rounds.length)}</button>)}
+      </div>
+      <button type="button" aria-label="Next round" disabled={active >= bracket.rounds.length - 1} onClick={() => goTo(active + 1)}><ChevronRight size={18} /></button>
     </div>
-    <p className="bracket-help">{onWinner ? "Click a player's or team's name to record the winner. " : "Follow the connecting lines to see who advances. "}Swipe or use the round buttons to explore.</p>
-    <div className="knockout-scroll" ref={scrollRef} tabIndex={0} aria-label="Scrollable tournament rounds" onScroll={(event) => {
+    <div className="ko-scroll" ref={scrollRef} tabIndex={0} aria-label="Scrollable tournament rounds" onScroll={(event) => {
       const scroller = event.currentTarget;
-      const columns = Array.from(scroller.querySelectorAll<HTMLElement>(".knockout-round"));
+      const columns = Array.from(scroller.querySelectorAll<HTMLElement>(".ko-round"));
       const atEnd = scroller.scrollLeft > 0 && scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 2;
-      const nearest = atEnd ? columns.length - 1 : columns.reduce((best, col, index) => Math.abs(col.offsetLeft - scroller.scrollLeft) < Math.abs(columns[best].offsetLeft - scroller.scrollLeft) ? index : best, 0);
+      const nearest = atEnd ? columns.length - 1 : columns.reduce((best, col, index) => Math.abs(col.offsetLeft - scroller.scrollLeft - 18) < Math.abs(columns[best].offsetLeft - scroller.scrollLeft - 18) ? index : best, 0);
       setActive(nearest);
     }}>
-      <div className="knockout-track" style={{ "--first-matches": bracket.rounds[0].length } as CSSProperties}>
-        {bracket.rounds.map((round, roundIndex) => <div className="knockout-round" key={roundIndex} style={{ "--span": 2 ** roundIndex } as CSSProperties}>
-          <h3>{roundName(roundIndex, bracket.rounds.length)}</h3>
-          <div className="knockout-round-matches">
-            {round.map(match => <div className={`knockout-slot ${roundIndex < bracket.rounds.length - 1 ? "has-next" : ""}`} key={match.id}>
-              <article id={`bracket-${tournament.id}-${match.id}`} className={`knockout-card ${match.winner ? "decided" : ""}`} aria-label={`${roundName(roundIndex, bracket.rounds.length)}, match ${match.position + 1}`}>
-                <div className="knockout-meta"><span>{match.date ? new Date(`${match.date}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : `Match ${match.position + 1}`}{match.time ? ` · ${match.time}` : ""}</span><b>{match.bye ? "BYE" : match.winner ? "FT" : match.a && match.b ? "Ready" : "Waiting"}</b></div>
+      <div className="ko-track" style={{ "--first-matches": bracket.rounds[0].length } as CSSProperties}>
+        {bracket.rounds.map((round, roundIndex) => <div className="ko-round" key={roundIndex} style={{ "--span": 2 ** roundIndex } as CSSProperties}>
+          <span className="ko-round-label">{roundName(roundIndex, bracket.rounds.length)}</span>
+          <div className="ko-matches">
+            {round.map(match => <div className={`ko-slot${roundIndex < bracket.rounds.length - 1 ? " has-line" : ""}`} key={match.id}>
+              <div id={`bracket-${tournament.id}-${match.id}`} className={`ko-match${match.winner ? " decided" : ""}${match.bye ? " bye" : ""}`} aria-label={`${roundName(roundIndex, bracket.rounds.length)}, match ${match.position + 1}`}>
+                {/* Match header - subtle date/status line */}
+                <div className="ko-header">
+                  <span>{match.date ? new Date(`${match.date}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : ""}{match.time ? ` · ${match.time}` : ""}</span>
+                  <span className={`ko-status${match.winner ? " ft" : match.bye ? " bye" : match.a && match.b ? " ready" : ""}`}>{match.bye ? "BYE" : match.winner ? "FT" : match.a && match.b ? "●" : ""}</span>
+                </div>
+                {/* Entrants */}
                 {(["a", "b"] as const).map(side => {
                   const id = match[side];
-                  const winner = !!id && match.winner === id;
-                  const label = id ? entries.get(id) : match.bye ? "Bye · automatic advance" : roundIndex ? `Winner of match ${match.position * 2 + (side === "a" ? 1 : 2)}` : "Awaiting entry";
-                  const content = <><span className="entrant-initial" aria-hidden="true">{id ? entries.get(id)?.slice(0, 1).toUpperCase() : "—"}</span><span className="entrant-name" title={label}>{label}</span><span className="entrant-score">{side === "a" ? match.scoreA : match.scoreB}</span>{winner && <Check size={16} aria-label="Winner" />}</>;
-                  return onWinner ? <button key={side} type="button" className={`knockout-entrant ${winner ? "winner" : match.winner ? "eliminated" : ""}`} disabled={busy || !match.a || !match.b || !!match.winner} aria-label={winner ? `${label}, winner` : `Choose ${label} as winner`} onClick={() => id && onWinner(match, id)}>{content}</button> : <div key={side} className={`knockout-entrant ${winner ? "winner" : match.winner ? "eliminated" : ""}`}>{content}</div>;
+                  const isWinner = !!id && match.winner === id;
+                  const isLoser = !!match.winner && !isWinner && !!id;
+                  const name = id ? entries.get(id) : match.bye ? "Bye" : roundIndex ? `TBD` : "—";
+                  const score = side === "a" ? match.scoreA : match.scoreB;
+                  const row = <>
+                    <span className="ko-name" title={name}>{name}</span>
+                    {score && <span className="ko-score">{score}</span>}
+                    {isWinner && <span className="ko-tick">✓</span>}
+                  </>;
+                  return onWinner
+                    ? <button key={side} type="button" className={`ko-entry${isWinner ? " w" : isLoser ? " l" : ""}`} disabled={busy || !match.a || !match.b || !!match.winner} aria-label={isWinner ? `${name}, winner` : `Choose ${name} as winner`} onClick={() => id && onWinner(match, id)}>{row}</button>
+                    : <div key={side} className={`ko-entry${isWinner ? " w" : isLoser ? " l" : ""}`}>{row}</div>;
                 })}
-                <div className="knockout-bottom"><span title={match.venue}>{match.venue || (match.bye ? "Advances automatically" : "Venue to be confirmed")}</span>{onDetails && !match.bye && <button type="button" onClick={() => onDetails(match)} disabled={busy}>Details</button>}{onWinner && match.winner && !match.bye && <button type="button" onClick={() => onWinner(match, null)} disabled={busy}>Undo</button>}</div>
-              </article>
+                {/* Footer: venue + actions */}
+                {!match.bye && <div className="ko-footer">
+                  <span>{match.venue || ""}</span>
+                  {onDetails && <button type="button" onClick={() => onDetails(match)} disabled={busy}>Details</button>}
+                  {onWinner && match.winner && <button type="button" onClick={() => onWinner(match, null)} disabled={busy}>Undo</button>}
+                </div>}
+              </div>
             </div>)}
           </div>
         </div>)}

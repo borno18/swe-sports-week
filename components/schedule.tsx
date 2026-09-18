@@ -103,7 +103,7 @@ export function Schedule({ initialDay, highlightedMatch, matches }: { initialDay
           <b role="status">{filtered.length} {filtered.length === 1 ? "match" : "matches"}</b>
         </div>
         {filtered.length > 0 ? (
-          <div className="match-grid" key={`${dayIndex}-${category}-${statusFilter}`}>
+          <div className="mc-grid" key={`${dayIndex}-${category}-${statusFilter}`}>
             {filtered.map(match => <MatchCard key={match.id} match={match} highlighted={match.id === highlightedMatch} />)}
           </div>
         ) : (

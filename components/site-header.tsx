@@ -68,6 +68,11 @@ export function SiteHeader({ matches, sports }: { matches: Match[]; sports: Spor
 
   useEffect(() => { setMenuOpen(false); setSearchOpen(false); setQuery(""); }, [pathname]);
 
+
+
+
+
+
   useEffect(() => {
     if (!menuOpen) return;
     headerRef.current?.querySelector<HTMLAnchorElement>("nav a")?.focus();
@@ -83,8 +88,17 @@ export function SiteHeader({ matches, sports }: { matches: Match[]; sports: Spor
       <header className="site-header" ref={headerRef}>
         <div className="nav-shell">
           <Link href="/" className="brand" aria-label="Sports Week home">
-            <span className="brand-mark">SW</span>
-            <span><strong>SPORTS WEEK</strong><small>SWE SOCIETY · SUST</small></span>
+            <div className="brand-logo-frame">
+              <img
+                src="/logos/swe-society-logo-white.png"
+                alt="SWE Society"
+                className="brand-logo-img"
+              />
+            </div>
+            <div className="brand-text">
+              <strong>SPORTS WEEK</strong>
+              <small>SWE SOCIETY · SUST</small>
+            </div>
           </Link>
           <nav id="main-navigation" className={menuOpen ? "nav-links open" : "nav-links"} aria-label="Main navigation">
             {nav.map(([label, href]) => <Link key={href} href={href} aria-current={pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)) ? "page" : undefined} onClick={() => setMenuOpen(false)}>{label}</Link>)}

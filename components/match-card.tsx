@@ -1,19 +1,33 @@
-import { MapPin, Radio, Trophy } from "lucide-react";
+import { MapPin, Trophy } from "lucide-react";
 import { eventDays, type Match } from "@/lib/data";
 
 export function MatchCard({ match, highlighted = false }: { match: Match; highlighted?: boolean }) {
+  const isCompleted = match.status === "completed";
+  const hasScores = match.scoreA || match.scoreB;
   return (
-    <article id={`match-${match.id}`} className={`match-card ${match.status}${highlighted ? " highlighted" : ""}`} tabIndex={-1}>
-      <div className="match-topline">
-        <span className="sport-label"><b>{match.icon}</b>{match.sport}</span>
-        <span className={`status-pill ${match.status}`}>{match.status === "live" && <Radio size={12} />} {match.status}</span>
+    <article id={`match-${match.id}`} className={`mc${isCompleted ? " mc-done" : ""}${highlighted ? " mc-hl" : ""}`} tabIndex={-1}>
+      <div className="mc-top">
+        <span className="mc-sport">{match.icon} {match.sport}</span>
+        <span className="mc-round">{match.category} · {match.round}</span>
       </div>
-      <p className="match-meta">{match.category} · {match.round}</p>
-      <p className="match-date">{eventDays[match.day - 1]?.label || match.date || "Date to be confirmed"}</p>
-      <div className="score-row"><strong>{match.participantA}</strong>{match.scoreA && <b>{match.scoreA}</b>}</div>
-      <div className="score-row"><strong>{match.participantB}</strong>{match.scoreB && <b>{match.scoreB}</b>}</div>
-      {match.winner && <p className="match-winner"><Trophy size={14} /> {match.winner} wins</p>}
-      <div className="match-footer"><span><MapPin size={14} />{match.venue}</span><span>{match.status === "completed" ? <Trophy size={14} /> : null}{match.time}</span></div>
+
+      <div className="mc-versus">
+        <div className={`mc-team${match.winner === match.participantA ? " mc-w" : ""}`}>
+          <span className="mc-team-name">{match.participantA}</span>
+          {hasScores && <span className="mc-team-score">{match.scoreA}</span>}
+        </div>
+        <div className={`mc-team${match.winner === match.participantB ? " mc-w" : ""}`}>
+          <span className="mc-team-name">{match.participantB}</span>
+          {hasScores && <span className="mc-team-score">{match.scoreB}</span>}
+        </div>
+      </div>
+
+      {match.winner && <div className="mc-winner"><Trophy size={13} strokeWidth={2.5} /> {match.winner}</div>}
+
+      <div className="mc-bottom">
+        <span><MapPin size={12} />{match.venue}</span>
+        <span>{eventDays[match.day - 1]?.label || match.date || "TBD"}{match.time !== "Time TBD" ? ` · ${match.time}` : ""}</span>
+      </div>
     </article>
   );
 }
