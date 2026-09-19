@@ -11,7 +11,7 @@ Fix the mobile overflow shown in the supplied screenshot, make navigation and to
 - [x] Remove database work from the shared navigation shell; load global search only when opened. Add immediate route loading feedback.
 - [x] Reduce unnecessary animation and repeated standings calculations without hiding content.
 - [x] Run automated tournament tests, TypeScript, production build, and mobile/desktop browser checks. Record measured results and limitations.
-- [ ] Commit and push the verified changes to the existing GitHub repository, as previously requested.
+- [x] Commit and push the verified changes to the existing GitHub repository, as previously requested.
 
 ## Findings
 - The working tree was clean at start; baseline commit: `58b3298`.
@@ -53,3 +53,8 @@ Use the installed Next.js documentation in `node_modules/next/dist/docs/` before
 - Local Chromium emulation does not replace testing on physical iPhone Safari. The supplied screenshot's overflow was reproduced and fixed structurally; a real-device check after deployment is still recommended.
 - Local timings use SQLite on this computer and cannot establish a production speed percentage. Database queries and changed-page renders still incur network/hosting latency on Vercel/Turso.
 - No new dependencies, cross-request data cache, or hosting configuration changes were introduced. Public data stays fresh without needing cache invalidation in every admin action.
+
+## Delivery
+- Implementation pushed to `origin/main`: `a7a9849` — Fix mobile tournament layouts and streamline live data loading.
+- GitHub had a newer Vercel Analytics integration (`6b86c71` / `9100449`). Rebased onto it, resolved the shared layout by preserving Analytics and the new nonblocking shell, installed its existing dependency, and passed TypeScript and production build again. No remote history was overwritten.
+- Test browser sessions and the isolated local server were stopped after verification. The GitHub push succeeded; production deployment completion and real-device timing have not been verified in this session.
