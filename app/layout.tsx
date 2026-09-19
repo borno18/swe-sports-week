@@ -6,6 +6,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { getTournamentData } from "@/lib/tournaments";
 import { getAnnouncements } from "@/lib/announcements";
 import { LiveRefresh } from "@/components/live-refresh";
+import { Analytics } from '@vercel/analytics/next';
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <LiveRefresh />
         <main id="main-content" tabIndex={-1}>{children}</main>
         <SiteFooter />
+        <Analytics />
       </body>
     </html>
   );
