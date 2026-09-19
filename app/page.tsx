@@ -8,7 +8,7 @@ import { Suspense } from "react";
 
 async function HeroStats() {
   const { sports, tournaments, matches, champions } = await getTournamentData();
-  return <div className="hero-scorebar"><div><strong>{sports.length}</strong><span>Sports</span></div><i /><div><strong>{tournaments.reduce((sum,t) => sum + t.bracket.entries.length,0)}</strong><span>Entries</span></div><i /><div><strong>{matches.filter(m => m.status === "completed").length}</strong><span>Matches played</span></div><i /><div><strong>{champions.length}</strong><span>Champions</span></div></div>;
+  return <div className="hero-scorebar"><div><strong>{sports.length}</strong><span>Sports</span></div><i /><div><strong>{tournaments.reduce((sum, t) => sum + t.bracket.entries.length, 0)}</strong><span>Entries</span></div><i /><div><strong>{matches.filter(m => m.status === "completed").length}</strong><span>Matches played</span></div><i /><div><strong>{champions.length}</strong><span>Champions</span></div></div>;
 }
 
 function StatsPlaceholder() {
@@ -34,7 +34,7 @@ export default function Home() {
         <div className="live-kicker">The official tournament hub</div>
         <h1><span>INTRA SWE</span>SPORTS WEEK</h1>
         <p className="hero-year">{event.year}</p>
-        <div className="hero-details"><span><CalendarDays size={18} />{event.dates}</span><span><MapPin size={18} />SUST Campus</span></div>
+        <div className="hero-details"><span><CalendarDays size={18} />{event.dates}</span><span><MapPin size={18} />IICT,SUST</span></div>
         <p className="hero-copy">One campus. Every batch. Follow every player, every match, and every path to the final.</p>
         <div className="hero-actions"><Link href="#tournaments" className="button primary">Explore the arenas <ArrowRight size={18} /></Link><Link href="/schedule" className="button ghost">View match schedule</Link></div>
         <EventCountdown />
