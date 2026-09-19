@@ -84,6 +84,12 @@ async function main() {
     });
     console.log(`Created admin account: ${email} (${role})`);
   }
+
+  // Clear any existing lockout or failed attempts for this email
+  await client.execute({
+    sql: "DELETE FROM login_attempts WHERE email = ?",
+    args: [email],
+  });
 }
 
 main().catch((err) => {
