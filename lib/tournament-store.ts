@@ -1,13 +1,47 @@
 import type { Client } from "@libsql/client";
 import { randomUUID } from "node:crypto";
-import { chooseWinner, createBracket, renameEntries, type Tournament, type Bracket } from "./bracket.ts";
+import {
+  chooseWinner,
+  createBracket,
+  createRoundRobin,
+  renameEntries,
+  type Tournament,
+  type Bracket,
+  type TournamentFormat,
+} from "./bracket.ts";
 
-type Row = { id: string; sport_slug: string; title: string; entry_kind: "player" | "team"; version: number; bracket: string };
+type Row = {
+  id: string;
+  sport_slug: string;
+  title: string;
+  entry_kind: "player" | "team";
+  version: number;
+  bracket: string;
+};
+
 export type Mutation =
-  | { kind: "lineup" | "rename"; names: string }
+  | {
+      kind: "lineup" | "rename";
+      names: string;
+      format?: TournamentFormat;
+      legs?: number;
+    }
   | { kind: "winner"; matchId: string; entryId: string | null }
   | { kind: "reset" }
-  | { kind: "details"; matchId: string; date: string; time: string; venue: string; scoreA: string; scoreB: string };
+  | {
+      kind: "details";
+      matchId: string;
+      date: string;
+      time: string;
+      venue: string;
+      scoreA: string;
+      scoreB: string;
+      date2?: string;
+      time2?: string;
+      venue2?: string;
+      scoreA2?: string;
+      scoreB2?: string;
+    };
 
 export async function initializeTournaments(db: Client, catalog: { slug: string; name: string }[]) {
   const existing = await db.execute("SELECT id, sport_slug, title FROM tournaments");
@@ -23,7 +57,7 @@ export async function initializeTournaments(db: Client, catalog: { slug: string;
           sport.slug,
           sport.name,
           ["football", "cricket"].includes(sport.slug) ? "team" : "player",
-          JSON.stringify({ entries: [], rounds: [] }),
+          JSON.stringify({ entries: [], rounds: [], format: "knockout", legs: 1 }),
         ],
       })),
       "write"
@@ -32,13 +66,16 @@ export async function initializeTournaments(db: Client, catalog: { slug: string;
 }
 
 function decode(row: Row): Tournament {
+  const parsed = JSON.parse(String(row.bracket)) as Bracket;
+  if (!parsed.format) parsed.format = "knockout";
+  if (!parsed.legs) parsed.legs = 1;
   return {
     id: String(row.id),
     sportSlug: String(row.sport_slug),
     title: String(row.title),
     entryKind: row.entry_kind as "player" | "team",
     version: Number(row.version),
-    bracket: JSON.parse(String(row.bracket)) as Bracket,
+    bracket: parsed,
   };
 }
 
@@ -47,28 +84,73 @@ export async function listTournaments(db: Client): Promise<Tournament[]> {
   return (res.rows as unknown as Row[]).map(decode);
 }
 
-export async function addTournament(db: Client, sportSlug: string, title: string, entryKind: string): Promise<string> {
+export async function addTournament(
+  db: Client,
+  sportSlug: string,
+  title: string,
+  entryKind: string,
+  format: TournamentFormat = "knockout",
+  legs: number = 1
+): Promise<string> {
   title = title.trim();
-  if (!title || title.length > 80 || /[\u0000-\u001f]/.test(title)) throw new Error("Enter a section name of 1–80 characters.");
-  if (!["player", "team"].includes(entryKind)) throw new Error("Choose players or teams.");
-  
+  if (!title || title.length > 80 || /[\u0000-\u001f]/.test(title)) {
+    throw new Error("Enter a section name of 1–80 characters.");
+  }
+  if (!["player", "team"].includes(entryKind)) {
+    throw new Error("Choose players or teams.");
+  }
+
   const existing = await db.execute({
     sql: "SELECT id FROM tournaments WHERE sport_slug = ? AND title = ? COLLATE NOCASE",
     args: [sportSlug, title],
   });
-  if (existing.rows.length > 0) throw new Error("A section with this name already exists for this sport.");
-  
+  if (existing.rows.length > 0) {
+    throw new Error("A section with this name already exists for this sport.");
+  }
+
   const id = randomUUID();
+  const initialBracket: Bracket = {
+    entries: [],
+    rounds: [],
+    format,
+    legs: legs === 2 ? 2 : 1,
+  };
+
   await db.execute({
     sql: "INSERT INTO tournaments(id,sport_slug,title,entry_kind,bracket) VALUES(?,?,?,?,?)",
-    args: [id, sportSlug, title, entryKind, JSON.stringify({ entries: [], rounds: [] })],
+    args: [id, sportSlug, title, entryKind, JSON.stringify(initialBracket)],
   });
   return id;
 }
 
-export async function mutateTournament(db: Client, id: string, version: number, actor: string, mutation: Mutation): Promise<Tournament> {
+export async function deleteTournament(db: Client, id: string): Promise<void> {
+  if (!id) throw new Error("Tournament ID is required.");
+  const tx = await db.transaction("write");
+  try {
+    await tx.execute({
+      sql: "DELETE FROM tournament_changes WHERE tournament_id = ?",
+      args: [id],
+    });
+    await tx.execute({
+      sql: "DELETE FROM tournaments WHERE id = ?",
+      args: [id],
+    });
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+}
+
+export async function mutateTournament(
+  db: Client,
+  id: string,
+  version: number,
+  actor: string,
+  mutation: Mutation
+): Promise<Tournament> {
   if (!Number.isSafeInteger(version) || version < 0) throw new Error("Invalid version. Refresh and try again.");
-  
+
   const tx = await db.transaction("write");
   try {
     const res = await tx.execute({
@@ -78,28 +160,81 @@ export async function mutateTournament(db: Client, id: string, version: number, 
     const row = res.rows[0] as unknown as Row | undefined;
     if (!row) throw new Error("Section not found.");
     if (Number(row.version) !== version) throw new Error("Another update was saved. Refresh this page before trying again.");
-    
+
     let bracket = decode(row).bracket;
     switch (mutation.kind) {
-      case "lineup":
+      case "lineup": {
         if (bracket.rounds.length) throw new Error("This bracket is already published. Rename entries or reset it first.");
-        bracket = createBracket(mutation.names); break;
-      case "rename": bracket = renameEntries(bracket, mutation.names); break;
-      case "reset": bracket = { entries: [], rounds: [] }; break;
-      case "winner": bracket = chooseWinner(bracket, mutation.matchId, mutation.entryId); break;
+        const chosenFormat = mutation.format || bracket.format || "knockout";
+        const chosenLegs = mutation.legs || bracket.legs || 1;
+        if (chosenFormat === "round_robin") {
+          bracket = createRoundRobin(mutation.names, chosenLegs);
+        } else {
+          bracket = createBracket(mutation.names, chosenLegs);
+        }
+        break;
+      }
+      case "rename":
+        bracket = renameEntries(bracket, mutation.names);
+        break;
+      case "reset":
+        bracket = {
+          entries: [],
+          rounds: [],
+          format: bracket.format || "knockout",
+          legs: bracket.legs || 1,
+        };
+        break;
+      case "winner":
+        bracket = chooseWinner(bracket, mutation.matchId, mutation.entryId);
+        break;
       case "details": {
         const match = bracket.rounds.flat().find(item => item.id === mutation.matchId);
         if (!match || match.bye) throw new Error("Choose a playable match.");
-        if (mutation.date && (!/^\d{4}-\d{2}-\d{2}$/.test(mutation.date) || Number.isNaN(Date.parse(mutation.date)) || new Date(mutation.date).toISOString().slice(0, 10) !== mutation.date)) throw new Error("Choose a valid date.");
-        if (mutation.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(mutation.time)) throw new Error("Choose a valid time.");
-        if (mutation.venue.trim().length > 100) throw new Error("Venue must be no longer than 100 characters.");
-        if (![mutation.scoreA, mutation.scoreB].every(score => score === "" || /^\d{1,3}$/.test(score))) throw new Error("Scores must be whole numbers from 0 to 999, or blank.");
-        if ((!match.a || !match.b) && (mutation.scoreA || mutation.scoreB)) throw new Error("Wait for both opponents before entering scores.");
-        Object.assign(match, { date: mutation.date, time: mutation.time, venue: mutation.venue.trim(), scoreA: mutation.scoreA, scoreB: mutation.scoreB });
+        if (
+          mutation.date &&
+          (!/^\d{4}-\d{2}-\d{2}$/.test(mutation.date) ||
+            Number.isNaN(Date.parse(mutation.date)) ||
+            new Date(mutation.date).toISOString().slice(0, 10) !== mutation.date)
+        ) {
+          throw new Error("Choose a valid date.");
+        }
+        if (mutation.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(mutation.time)) {
+          throw new Error("Choose a valid time.");
+        }
+        if (mutation.venue.trim().length > 100) {
+          throw new Error("Venue must be no longer than 100 characters.");
+        }
+        if (![mutation.scoreA, mutation.scoreB].every(score => score === "" || /^\d{1,3}$/.test(score))) {
+          throw new Error("Scores must be whole numbers from 0 to 999, or blank.");
+        }
+        if ((!match.a || !match.b) && (mutation.scoreA || mutation.scoreB)) {
+          throw new Error("Wait for both opponents before entering scores.");
+        }
+
+        // Leg 2 validation if present
+        if (mutation.scoreA2 !== undefined && mutation.scoreB2 !== undefined) {
+          if (![mutation.scoreA2, mutation.scoreB2].every(score => score === "" || /^\d{1,3}$/.test(score))) {
+            throw new Error("Leg 2 scores must be whole numbers from 0 to 999, or blank.");
+          }
+        }
+
+        Object.assign(match, {
+          date: mutation.date,
+          time: mutation.time,
+          venue: mutation.venue.trim(),
+          scoreA: mutation.scoreA,
+          scoreB: mutation.scoreB,
+          scoreA2: mutation.scoreA2 !== undefined ? mutation.scoreA2 : match.scoreA2,
+          scoreB2: mutation.scoreB2 !== undefined ? mutation.scoreB2 : match.scoreB2,
+          date2: mutation.date2 !== undefined ? mutation.date2 : match.date2,
+          time2: mutation.time2 !== undefined ? mutation.time2 : match.time2,
+          venue2: mutation.venue2 !== undefined ? mutation.venue2.trim() : match.venue2,
+        });
         break;
       }
     }
-    
+
     await tx.execute({
       sql: "UPDATE tournaments SET bracket = ?, version = version + 1 WHERE id = ?",
       args: [JSON.stringify(bracket), id],

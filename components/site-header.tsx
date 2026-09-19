@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Search, Shield, X } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { announcements, type Match, type Sport } from "@/lib/data";
+import { announcements as fallbackAnnouncements, type Match, type Sport } from "@/lib/data";
 
 const nav = [
   ["Home", "/"],
@@ -17,7 +17,15 @@ const nav = [
 
 type SearchItem = { icon: string; title: string; subtitle: string; href: string; type: string };
 
-export function SiteHeader({ matches, sports }: { matches: Match[]; sports: Sport[] }) {
+export function SiteHeader({
+  matches,
+  sports,
+  announcements: dynamicAnnouncements,
+}: {
+  matches: Match[];
+  sports: Sport[];
+  announcements?: { title: string; body: string }[];
+}) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -30,11 +38,14 @@ export function SiteHeader({ matches, sports }: { matches: Match[]; sports: Spor
   function closeSearch() { setSearchOpen(false); setQuery(""); }
   function openSearch() { setMenuOpen(false); setSearchOpen(true); }
 
-  const searchItems: SearchItem[] = useMemo(() => [
-    ...sports.map(s => ({ icon: s.icon, title: s.name, subtitle: `${s.category} tournament · ${s.stage}`, href: `/sports/${s.slug}`, type: "Sport" })),
-    ...matches.map(m => ({ icon: m.icon, title: `${m.participantA} vs ${m.participantB}`, subtitle: `${m.sport} · ${m.round} · ${m.venue}`, href: `/schedule?day=${m.day}&match=${m.id}#match-${m.id}`, type: "Match" })),
-    ...announcements.map(a => ({ icon: "📢", title: a.title, subtitle: a.body.slice(0, 80), href: "/announcements", type: "Notice" })),
-  ], [sports, matches]);
+  const searchItems: SearchItem[] = useMemo(() => {
+    const list = dynamicAnnouncements && dynamicAnnouncements.length > 0 ? dynamicAnnouncements : fallbackAnnouncements;
+    return [
+      ...sports.map(s => ({ icon: s.icon, title: s.name, subtitle: `${s.category} tournament · ${s.stage}`, href: `/sports/${s.slug}`, type: "Sport" })),
+      ...matches.map(m => ({ icon: m.icon, title: `${m.participantA} vs ${m.participantB}`, subtitle: `${m.sport} · ${m.round} · ${m.venue}`, href: `/schedule?day=${m.day}&match=${m.id}#match-${m.id}`, type: "Match" })),
+      ...list.map(a => ({ icon: "📢", title: a.title, subtitle: a.body.slice(0, 80), href: "/announcements", type: "Notice" })),
+    ];
+  }, [sports, matches, dynamicAnnouncements]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -67,11 +78,6 @@ export function SiteHeader({ matches, sports }: { matches: Match[]; sports: Spor
   }, [searchOpen]);
 
   useEffect(() => { setMenuOpen(false); setSearchOpen(false); setQuery(""); }, [pathname]);
-
-
-
-
-
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -112,48 +118,48 @@ export function SiteHeader({ matches, sports }: { matches: Match[]; sports: Spor
         </div>
       </header>
 
-        <dialog ref={dialogRef} className="search-overlay" aria-label="Search Sports Week" onCancel={closeSearch} onClose={closeSearch} onClick={(e) => { if (e.target === e.currentTarget) closeSearch(); }} onKeyDown={(e) => {
-          if (e.key !== "Tab") return;
-          const controls = e.currentTarget.querySelectorAll<HTMLElement>("input, button, a[href]");
-          const first = controls[0];
-          const last = controls[controls.length - 1];
-          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
-          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
-        }}>
-          <div className="search-box">
-            <div className="search-input-row">
-              <Search size={20} />
-              <input ref={inputRef} aria-label="Search matches, sports, and announcements" type="search" placeholder="Search matches, sports, announcements…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => {
-                if (e.key === "ArrowDown" || e.key === "Enter") {
-                  const first = dialogRef.current?.querySelector<HTMLAnchorElement>(".search-result-item");
-                  if (first) { e.preventDefault(); if (e.key === "Enter") first.click(); else first.focus(); }
-                }
-              }} />
-              <button className="search-close" aria-label="Close search" onClick={closeSearch}><X size={18} /></button>
-            </div>
-            {query.trim() ? (
-              results.length > 0 ? (
-                <div className="search-results">
-                  {results.map((item, i) => (
-                    <Link key={i} href={item.href} className="search-result-item" onClick={closeSearch}>
-                      <span className="search-result-icon">{item.icon}</span>
-                      <div><h4>{item.title}</h4><p>{item.subtitle}</p></div>
-                      <span className="search-result-type">{item.type}</span>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="search-empty" role="status"><span>🔍</span><p>No results for &ldquo;{query}&rdquo;</p></div>
-              )
-            ) : (
-              <div className="search-results">
-                <div className="search-empty"><span>⚡</span><p>Start typing to search across the entire Sports Week</p></div>
-              </div>
-            )}
-            <div className="sr-only" role="status">{query.trim() && `${results.length} results found`}</div>
-            <div className="search-hint"><span><kbd>Esc</kbd> to close</span><span><kbd>Ctrl / ⌘ K</kbd> to open</span></div>
+      <dialog ref={dialogRef} className="search-overlay" aria-label="Search Sports Week" onCancel={closeSearch} onClose={closeSearch} onClick={(e) => { if (e.target === e.currentTarget) closeSearch(); }} onKeyDown={(e) => {
+        if (e.key !== "Tab") return;
+        const controls = e.currentTarget.querySelectorAll<HTMLElement>("input, button, a[href]");
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }}>
+        <div className="search-box">
+          <div className="search-input-row">
+            <Search size={20} />
+            <input ref={inputRef} aria-label="Search matches, sports, and announcements" type="search" placeholder="Search matches, sports, announcements…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => {
+              if (e.key === "ArrowDown" || e.key === "Enter") {
+                const first = dialogRef.current?.querySelector<HTMLAnchorElement>(".search-result-item");
+                if (first) { e.preventDefault(); if (e.key === "Enter") first.click(); else first.focus(); }
+              }
+            }} />
+            <button className="search-close" aria-label="Close search" onClick={closeSearch}><X size={18} /></button>
           </div>
-        </dialog>
+          {query.trim() ? (
+            results.length > 0 ? (
+              <div className="search-results">
+                {results.map((item, i) => (
+                  <Link key={i} href={item.href} className="search-result-item" onClick={closeSearch}>
+                    <span className="search-result-icon">{item.icon}</span>
+                    <div><h4>{item.title}</h4><p>{item.subtitle}</p></div>
+                    <span className="search-result-type">{item.type}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="search-empty" role="status"><span>🔍</span><p>No results for &ldquo;{query}&rdquo;</p></div>
+            )
+          ) : (
+            <div className="search-results">
+              <div className="search-empty"><span>⚡</span><p>Start typing to search across the entire Sports Week</p></div>
+            </div>
+          )}
+          <div className="sr-only" role="status">{query.trim() && `${results.length} results found`}</div>
+          <div className="search-hint"><span><kbd>Esc</kbd> to close</span><span><kbd>Ctrl / ⌘ K</kbd> to open</span></div>
+        </div>
+      </dialog>
     </>
   );
 }

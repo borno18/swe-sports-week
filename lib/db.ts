@@ -86,6 +86,25 @@ export async function ensureDatabaseInitialized(): Promise<Client> {
           action TEXT NOT NULL,
           previous_bracket TEXT NOT NULL,
           created_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS announcements (
+          id TEXT PRIMARY KEY,
+          level TEXT NOT NULL CHECK (level IN ('general', 'important', 'urgent', 'update')),
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          time TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          created_by TEXT REFERENCES users(id) ON DELETE SET NULL
+        )`,
+        `CREATE INDEX IF NOT EXISTS announcements_created_at_idx ON announcements(created_at DESC)`,
+        `CREATE TABLE IF NOT EXISTS sports (
+          slug TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          icon TEXT NOT NULL,
+          category TEXT NOT NULL CHECK(category IN ('Indoor', 'Outdoor')),
+          color TEXT NOT NULL,
+          detail TEXT NOT NULL DEFAULT '',
+          created_at INTEGER NOT NULL
         )`
       ], "write");
     })();
