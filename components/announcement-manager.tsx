@@ -9,6 +9,7 @@ import {
   type AnnouncementActionResult,
 } from "@/app/admin/announcement-actions";
 import type { Announcement, AnnouncementLevel } from "@/lib/announcements";
+import { AnnouncementBody } from "@/components/announcement-body";
 
 const initial: AnnouncementActionResult = { ok: false, message: "" };
 
@@ -245,7 +246,9 @@ export function AnnouncementManager({
                   <AnnouncementDeleteButton id={item.id} title={item.title} />
                 </div>
                 <h3 className="notice-item-title">{item.title}</h3>
-                <p className="notice-item-body">{item.body}</p>
+                <div className="notice-item-body">
+                  <AnnouncementBody content={item.body} />
+                </div>
                 {item.authorName && (
                   <footer className="notice-item-author">
                     Posted by: <span>{item.authorName}</span>

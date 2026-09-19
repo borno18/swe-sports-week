@@ -1,8 +1,16 @@
-import { Megaphone, AlertTriangle, AlertCircle } from "lucide-react";
+import { Megaphone, AlertTriangle, AlertCircle, Sparkles, Clock } from "lucide-react";
 import { getAnnouncements } from "@/lib/announcements";
 import { announcements as fallbackAnnouncements } from "@/lib/data";
+import { AnnouncementBody } from "@/components/announcement-body";
 
 export const dynamic = "force-dynamic";
+
+const LEVEL_LABELS: Record<string, string> = {
+  urgent: "Urgent Alert",
+  important: "Important",
+  update: "Score / Update",
+  general: "General Notice",
+};
 
 export default async function AnnouncementsPage() {
   const dbAnnouncements = await getAnnouncements();
@@ -16,31 +24,45 @@ export default async function AnnouncementsPage() {
           <span>Official Communications · SWE Society</span>
         </div>
         <h1>Announcements</h1>
-        <p>Official schedule changes, check-in reminders, and tournament notices.</p>
+        <p>Official schedule changes, check-in reminders, registration links, and tournament notices.</p>
       </header>
       <div className="notice-grid wide">
         {items.map((item, index) => {
           const levelClass = item.level ? item.level.toLowerCase() : "general";
           const key = "id" in item && item.id ? String(item.id) : `${item.title}-${index}`;
           const author = "authorName" in item && typeof item.authorName === "string" ? item.authorName : null;
+          const levelLabel = LEVEL_LABELS[levelClass] || "Notice";
 
           return (
             <article className={`notice-card ${levelClass}`} key={key}>
-              <div className="notice-icon">
+              <div className="notice-icon" aria-hidden="true">
                 {levelClass === "urgent" ? (
                   <AlertTriangle />
                 ) : levelClass === "important" ? (
                   <AlertCircle />
+                ) : levelClass === "update" ? (
+                  <Sparkles />
                 ) : (
                   <Megaphone />
                 )}
               </div>
-              <div>
-                <span>{item.level.toUpperCase()} · {item.time}</span>
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
+              <div className="notice-card-content">
+                <div className="notice-card-meta">
+                  <span className={`announcement-pill ${levelClass}`}>
+                    {levelLabel}
+                  </span>
+                  <span className="notice-time-badge">
+                    <Clock size={12} aria-hidden="true" /> {item.time}
+                  </span>
+                </div>
+                <h2 className="notice-card-title">{item.title}</h2>
+                <div className="notice-card-body">
+                  <AnnouncementBody content={item.body} />
+                </div>
                 {author && (
-                  <small className="notice-card-author">Posted by {author}</small>
+                  <footer className="notice-card-footer">
+                    <span>Posted by:</span> <strong>{author}</strong>
+                  </footer>
                 )}
               </div>
             </article>
