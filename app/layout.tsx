@@ -3,10 +3,10 @@ import "./globals.css";
 import "./tournaments.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { getTournamentData } from "@/lib/tournaments";
-import { getAnnouncements } from "@/lib/announcements";
 import { LiveRefresh } from "@/components/live-refresh";
-import { Analytics } from '@vercel/analytics/next';
+import { Analytics } from "@vercel/analytics/next";
+import { Suspense } from "react";
+import { getPublicRevision } from "@/lib/public-revision";
 
 export const dynamic = "force-dynamic";
 
@@ -15,18 +15,17 @@ export const metadata: Metadata = {
   description: "The live tournament hub for Intra SWE Sports Week, SUST.",
 };
 
-export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const [{ sports, matches }, announcements] = await Promise.all([
-    getTournamentData(),
-    getAnnouncements(),
-  ]);
+async function LiveUpdates() {
+  return <LiveRefresh initialRevision={await getPublicRevision()} />;
+}
 
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>
         <a href="#main-content" className="skip-link">Skip to content</a>
-        <SiteHeader sports={sports} matches={matches} announcements={announcements} />
-        <LiveRefresh />
+        <SiteHeader />
+        <Suspense fallback={null}><LiveUpdates /></Suspense>
         <main id="main-content" tabIndex={-1}>{children}</main>
         <SiteFooter />
         <Analytics />

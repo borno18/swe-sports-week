@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Trophy, Crown, Calendar, MapPin, Clock, Edit2 } from "lucide-react";
 import {
   calculateStandings,
@@ -22,13 +22,14 @@ export function RoundRobinView({
   busy?: boolean;
 }) {
   const { bracket } = tournament;
-  const entries = new Map(bracket.entries.map(e => [e.id, e.name]));
-  const standings = calculateStandings(bracket);
-  const champion = championOf(bracket);
+  const entries = useMemo(() => new Map(bracket.entries.map(e => [e.id, e.name])), [bracket.entries]);
+  const standings = useMemo(() => calculateStandings(bracket), [bracket]);
+  const champion = useMemo(() => championOf(bracket), [bracket]);
   const sportObj = catalog.find(s => s.slug === tournament.sportSlug);
   const sportColor = sportObj?.color || "#72d2ff";
 
   const [activeRound, setActiveRound] = useState<number>(0);
+  const selectedRound = Math.min(activeRound, Math.max(0, bracket.rounds.length - 1));
 
   if (!bracket.rounds.length) {
     return (
@@ -72,12 +73,15 @@ export function RoundRobinView({
           <h3>Tournament Standings</h3>
           <span className="rr-badge">{bracket.legs === 2 ? "2-Leg Series" : "Round Robin"}</span>
         </div>
-        <div className="rr-table-wrapper">
+        <p className="rr-scroll-hint">Swipe the table for all stats <span aria-hidden="true">↔</span></p>
+        <div className="rr-table-wrapper" role="region" aria-label={`${tournament.title} standings, scroll for all statistics`} tabIndex={0}>
           <table className="rr-table">
+            <caption className="sr-only">{tournament.title} standings. P: played, W: won, D: drawn, L: lost, GF: goals for, GA: goals against, GD: goal difference, PTS: points.</caption>
             <thead>
               <tr>
                 <th className="th-rank">#</th>
                 <th className="th-team">Team / Player</th>
+                <th className="th-pts" title="Total Points">PTS</th>
                 <th title="Matches Played">P</th>
                 <th title="Won">W</th>
                 <th title="Drawn">D</th>
@@ -85,18 +89,18 @@ export function RoundRobinView({
                 <th title="Goals/Points For">GF</th>
                 <th title="Goals/Points Against">GA</th>
                 <th title="Goal/Score Difference">GD</th>
-                <th className="th-pts" title="Total Points">PTS</th>
               </tr>
             </thead>
             <tbody>
               {standings.map((row, idx) => (
-                <tr key={row.id} className={idx === 0 ? "rank-leader" : ""}>
+                <tr key={row.id} className={idx === 0 && row.played > 0 ? "rank-leader" : ""}>
                   <td className="td-rank">
-                    {idx === 0 ? <Crown size={13} className="crown-icon" /> : idx + 1}
+                    {idx === 0 && row.played > 0 ? <Crown size={13} className="crown-icon" aria-label="First place" /> : idx + 1}
                   </td>
                   <td className="td-team">
                     <strong>{row.name}</strong>
                   </td>
+                  <td className="td-pts">{row.points}</td>
                   <td>{row.played}</td>
                   <td>{row.won}</td>
                   <td>{row.drawn}</td>
@@ -106,7 +110,6 @@ export function RoundRobinView({
                   <td className={row.gd > 0 ? "pos-gd" : row.gd < 0 ? "neg-gd" : ""}>
                     {row.gd > 0 ? `+${row.gd}` : row.gd}
                   </td>
-                  <td className="td-pts">{row.points}</td>
                 </tr>
               ))}
             </tbody>
@@ -118,12 +121,13 @@ export function RoundRobinView({
       <section className="rr-fixtures-card">
         <div className="rr-card-head">
           <h3>Fixtures &amp; Results</h3>
-          <div className="rr-round-selector">
+          <div className="rr-round-selector" role="group" aria-label="Fixture round">
             {bracket.rounds.map((_, idx) => (
               <button
                 key={idx}
                 type="button"
-                className={`rr-round-btn ${activeRound === idx ? "active" : ""}`}
+                className={`rr-round-btn ${selectedRound === idx ? "active" : ""}`}
+                aria-pressed={selectedRound === idx}
                 onClick={() => setActiveRound(idx)}
               >
                 Round {idx + 1}
@@ -133,7 +137,7 @@ export function RoundRobinView({
         </div>
 
         <div className="rr-matches-grid">
-          {bracket.rounds[activeRound]?.map((match) => {
+          {bracket.rounds[selectedRound]?.map((match) => {
             const nameA = match.a ? entries.get(match.a) ?? "Team A" : "TBD";
             const nameB = match.b ? entries.get(match.b) ?? "Team B" : "TBD";
             const isCompleted = !!match.completedAt || (match.scoreA !== "" && match.scoreB !== "");

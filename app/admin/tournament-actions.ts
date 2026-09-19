@@ -126,6 +126,7 @@ export async function saveSportAction(_state: ActionResult, form: FormData): Pro
   try {
     const db = await tournamentDatabase();
     const created = await addSport(db, { name, icon, category, color, detail });
+    await addTournament(db, created.slug, created.name, ["football", "cricket"].includes(created.slug) ? "team" : "player");
     revalidatePath("/", "layout");
     revalidatePath("/admin");
     revalidatePath("/sports");

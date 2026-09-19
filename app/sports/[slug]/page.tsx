@@ -24,7 +24,7 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
         <div className="sport-summary">
           <span><Users /> <b>{sport.participants}</b> Players / teams</span>
           <span><CalendarDays /> <b>{sport.matches}</b> Matches</span>
-          <span><Trophy /> {hasLeague ? "Group Stage & Knockout" : "Single elimination"}</span>
+          <span><Trophy /> {hasLeague ? (sections.some(s => s.bracket.format !== "round_robin") ? "League & knockout" : "Round robin league") : "Single elimination"}</span>
         </div>
       </header>
       <div className="public-brackets">
@@ -33,7 +33,7 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
             <span className="eyebrow">From the first round to the final</span>
             <h2>Tournament fixtures &amp; tables</h2>
           </div>
-          <span className="update-label">Updates automatically · every 10 seconds</span>
+          <span className="update-label">Live updates · checked every 10 seconds</span>
         </div>
         {sections.length > 1 && (
           <nav className="filter-row" aria-label="Sport sections">

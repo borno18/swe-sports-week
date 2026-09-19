@@ -43,7 +43,7 @@ export type Mutation =
       scoreB2?: string;
     };
 
-export async function initializeTournaments(db: Client, catalog: { slug: string; name: string }[]) {
+export async function initializeTournaments(db: Pick<Client, "execute" | "batch">, catalog: { slug: string; name: string }[]) {
   const existing = await db.execute("SELECT id, sport_slug, title FROM tournaments");
   const existingSet = new Set(existing.rows.map(r => `${String(r.sport_slug)}:${String(r.title).toLowerCase()}`));
   const missing = catalog.filter(sport => !existingSet.has(`${sport.slug}:${sport.name.toLowerCase()}`));

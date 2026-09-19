@@ -1,7 +1,7 @@
 import type { Client } from "@libsql/client";
-import type { Sport } from "./data";
+import type { Sport } from "./data.ts";
 
-export async function listSports(db: Client): Promise<Sport[]> {
+export async function listSports(db: Pick<Client, "execute">): Promise<Sport[]> {
   const res = await db.execute("SELECT slug, name, icon, category, color, detail FROM sports ORDER BY created_at ASC, rowid ASC");
   return res.rows.map(r => ({
     slug: String(r.slug),
@@ -16,7 +16,7 @@ export async function listSports(db: Client): Promise<Sport[]> {
   }));
 }
 
-export async function initializeSports(db: Client, defaultCatalog: Sport[]): Promise<void> {
+export async function initializeSports(db: Pick<Client, "execute" | "batch">, defaultCatalog: Sport[]): Promise<void> {
   const existing = await db.execute("SELECT count(*) as count FROM sports");
   const count = Number(existing.rows[0]?.count || 0);
   if (count === 0 && defaultCatalog.length > 0) {

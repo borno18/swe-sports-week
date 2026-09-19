@@ -3,14 +3,23 @@ import { cache } from "react";
 import { ensureDatabaseInitialized } from "@/lib/db";
 import { sports as catalog, eventDays, type Match, type Champion, type Sport } from "@/lib/data";
 import { championOf, roundName } from "@/lib/bracket";
-import { initializeTournaments, listTournaments } from "@/lib/tournament-store";
-import { initializeSports, listSports } from "@/lib/sports-store";
+import { listTournaments } from "@/lib/tournament-store";
+import { listSports } from "@/lib/sports-store";
+import { initializeCatalog } from "@/lib/catalog-store";
+
+declare global {
+  var sportsWeekCatalogInitPromise: Promise<void> | undefined;
+}
 
 export async function tournamentDatabase() {
   const db = await ensureDatabaseInitialized();
-  await initializeSports(db, catalog);
-  const currentSports = await listSports(db);
-  await initializeTournaments(db, currentSports.length > 0 ? currentSports : catalog);
+  if (!global.sportsWeekCatalogInitPromise) {
+    global.sportsWeekCatalogInitPromise = initializeCatalog(db, catalog).catch(error => {
+      global.sportsWeekCatalogInitPromise = undefined;
+      throw error;
+    });
+  }
+  await global.sportsWeekCatalogInitPromise;
   return db;
 }
 
@@ -21,9 +30,10 @@ export const getTournamentData = cache(async () => {
     listSports(db),
   ]);
 
-  const activeCatalog: Sport[] = dynamicSports.length > 0 ? dynamicSports : catalog;
+  const activeCatalog: Sport[] = dynamicSports;
   const matches: Match[] = [];
   const champions: Champion[] = [];
+  const completedSections = new Set<string>();
 
   for (const tournament of tournaments) {
     const sport = activeCatalog.find(item => item.slug === tournament.sportSlug) || {
@@ -77,6 +87,7 @@ export const getTournamentData = cache(async () => {
 
     const champion = championOf(tournament.bracket);
     if (champion) {
+      completedSections.add(tournament.id);
       champions.push({
         sport: tournament.title,
         icon: sport.icon,
@@ -100,7 +111,7 @@ export const getTournamentData = cache(async () => {
       detail: `${sections.length} ${sections.length === 1 ? "section" : "sections"} · ${formatLabel}`,
       stage: !published.length
         ? "Awaiting entries"
-        : published.every(t => championOf(t.bracket))
+        : published.every(t => completedSections.has(t.id))
           ? "Completed"
           : "In progress",
     };

@@ -14,7 +14,8 @@ export function getDatabase(): Client {
     const url = process.env.TURSO_DATABASE_URL || process.env.SPORTS_WEEK_DATABASE_URL;
     const authToken = process.env.TURSO_AUTH_TOKEN || process.env.SPORTS_WEEK_AUTH_TOKEN;
 
-    if (url) {
+    // Explicit local paths take precedence over credentials loaded from .env.local.
+    if (url && !process.env.SPORTS_WEEK_DATABASE_PATH) {
       global.sportsWeekDatabase = createClient({
         url,
         authToken,
@@ -107,7 +108,10 @@ export async function ensureDatabaseInitialized(): Promise<Client> {
           created_at INTEGER NOT NULL
         )`
       ], "write");
-    })();
+    })().catch(error => {
+      global.sportsWeekDatabaseInitPromise = undefined;
+      throw error;
+    });
   }
   await global.sportsWeekDatabaseInitPromise;
   return db;

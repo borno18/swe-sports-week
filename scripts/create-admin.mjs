@@ -38,7 +38,7 @@ const url = process.env.TURSO_DATABASE_URL || process.env.SPORTS_WEEK_DATABASE_U
 const authToken = process.env.TURSO_AUTH_TOKEN || process.env.SPORTS_WEEK_AUTH_TOKEN;
 
 let client;
-if (url) {
+if (url && !process.env.SPORTS_WEEK_DATABASE_PATH) {
   client = createClient({ url, authToken });
 } else {
   const dataDirectory = join(process.cwd(), "data");

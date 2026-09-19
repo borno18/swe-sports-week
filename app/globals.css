@@ -20,6 +20,9 @@ a { color: inherit; text-decoration: none; }
 button, input { font: inherit; }
 button { color: inherit; }
 main { min-height: 70vh; }
+main, .page-shell, .section, .sport-page { min-width: 0; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, a { touch-action: manipulation; }
 
 .admin-card form .button { width: 100%; }
 .login-error { margin: 18px 0 0; padding: 11px 13px; border: 1px solid rgba(255,79,85,.38); border-radius: 8px; color: #ffd7d9; background: rgba(255,79,85,.12); font-size: 11px; }
@@ -291,8 +294,7 @@ main { min-height: 70vh; }
 @keyframes progressFill { from { width: 0; } }
 
 /* ─── Hero Animations ─── */
-.hero-content { animation: fadeInUp .8s ease-out; }
-.hero-scorebar { animation: fadeInUp .6s ease-out .4s both; }
+.hero-content, .hero-scorebar { animation: none; }
 .live-kicker span { animation: livePulse 1.5s ease-in-out infinite; }
 .hero-orbit { animation: float 4.5s ease-in-out infinite; }
 .orbit-one { --float-r: -12deg; }
@@ -301,7 +303,7 @@ main { min-height: 70vh; }
 .progress-track span { animation: progressFill 1.5s ease-out .5s both; }
 
 /* ─── Card Entrance Animations ─── */
-.match-card, .notice-card, .winner-card, .champion-row, .timeline-item { animation: fadeInUp .45s ease-out both; }
+.match-card, .notice-card, .winner-card, .champion-row, .timeline-item { animation: none; }
 
 /* ─── Card Hover Interactions ─── */
 .match-card { transition: transform .25s, box-shadow .25s; }
@@ -426,4 +428,40 @@ main { min-height: 70vh; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   html { scroll-behavior: auto; }
   .reveal, .reveal:not(.revealed) { opacity: 1; transform: none; }
+}
+
+/* Immediate route feedback; no entrance animation delays readable content. */
+.route-loading { min-height: 65vh; }
+.route-loading p { color: var(--muted); font-size: 15px; }
+.loading-line { height: 30px; width: min(70%, 420px); border-radius: 8px; background: #e5e5ed; margin: 24px 0; }
+.loading-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.loading-cards > div { height: 180px; border: 1px solid var(--line); border-radius: 14px; background: #eeedf2; }
+@media (max-width: 620px) {
+  .site-header { background: #0b0d39; backdrop-filter: none; }
+  .brand { min-width: 0; }
+  .brand-logo-frame, .nav-actions { flex-shrink: 0; }
+  .icon-button, .menu-button { width: 44px; height: 44px; }
+  .sport-hero { padding: 28px 20px 26px; }
+  .sport-hero > a { min-height: 44px; margin-bottom: 16px; font-size: 12px; }
+  .sport-hero h1 { max-width: 85%; font-size: clamp(38px, 11vw, 54px); line-height: 1.05; }
+  .sport-hero p { position: relative; z-index: 2; max-width: 85%; font-size: 13px; line-height: 1.6; }
+  .sport-hero-icon { font-size: 90px; right: 12px; top: 70px; bottom: auto; opacity: .25; }
+  .sport-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 8px; margin-top: 20px; }
+  .sport-summary span { padding: 11px 10px; font-size: 11px; border: 1px solid rgba(7,9,54,.06); }
+  .sport-summary span:last-child { grid-column: 1 / -1; }
+  .sport-summary svg { flex-shrink: 0; }
+  .hero-content { padding-top: 38px; }
+  .hero-orbit { animation: none; }
+  .hero-organizer-badge { backdrop-filter: none; }
+  .search-overlay { backdrop-filter: none; padding-top: 80px; }
+  .search-input-row input { font-size: 16px; }
+  .loading-cards { grid-template-columns: minmax(0, 1fr); }
+  .loading-cards > div { height: 110px; }
+}
+.search-result-item > div { min-width: 0; overflow-wrap: anywhere; }
+.search-close { min-width: 44px; min-height: 44px; }
+@media (max-width: 620px) {
+  .search-input-row { gap: 8px; padding: 12px; }
+  .search-result-item { gap: 10px; padding: 12px 8px; }
+  .search-result-type { display: none; }
 }

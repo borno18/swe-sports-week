@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Search, Shield, X } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { announcements as fallbackAnnouncements, type Match, type Sport } from "@/lib/data";
 
 const nav = [
   ["Home", "/"],
@@ -17,19 +16,15 @@ const nav = [
 
 type SearchItem = { icon: string; title: string; subtitle: string; href: string; type: string };
 
-export function SiteHeader({
-  matches,
-  sports,
-  announcements: dynamicAnnouncements,
-}: {
-  matches: Match[];
-  sports: Sport[];
-  announcements?: { title: string; body: string }[];
-}) {
+export function SiteHeader() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [searchItems, setSearchItems] = useState<SearchItem[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -38,14 +33,18 @@ export function SiteHeader({
   function closeSearch() { setSearchOpen(false); setQuery(""); }
   function openSearch() { setMenuOpen(false); setSearchOpen(true); }
 
-  const searchItems: SearchItem[] = useMemo(() => {
-    const list = dynamicAnnouncements && dynamicAnnouncements.length > 0 ? dynamicAnnouncements : fallbackAnnouncements;
-    return [
-      ...sports.map(s => ({ icon: s.icon, title: s.name, subtitle: `${s.category} tournament · ${s.stage}`, href: `/sports/${s.slug}`, type: "Sport" })),
-      ...matches.map(m => ({ icon: m.icon, title: `${m.participantA} vs ${m.participantB}`, subtitle: `${m.sport} · ${m.round} · ${m.venue}`, href: `/schedule?day=${m.day}&match=${m.id}#match-${m.id}`, type: "Match" })),
-      ...list.map(a => ({ icon: "📢", title: a.title, subtitle: a.body.slice(0, 80), href: "/announcements", type: "Notice" })),
-    ];
-  }, [sports, matches, dynamicAnnouncements]);
+  useEffect(() => {
+    if (!searchOpen) return;
+    const controller = new AbortController();
+    setSearchLoading(true);
+    setSearchError(false);
+    fetch("/api/search", { signal: controller.signal, cache: "no-store" })
+      .then(response => { if (!response.ok) throw new Error("Search unavailable"); return response.json(); })
+      .then((items: SearchItem[]) => { if (!controller.signal.aborted) setSearchItems(items); })
+      .catch(() => { if (!controller.signal.aborted) setSearchError(true); })
+      .finally(() => { if (!controller.signal.aborted) setSearchLoading(false); });
+    return () => controller.abort();
+  }, [searchOpen, searchAttempt]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -137,7 +136,9 @@ export function SiteHeader({
             }} />
             <button className="search-close" aria-label="Close search" onClick={closeSearch}><X size={18} /></button>
           </div>
-          {query.trim() ? (
+          {searchLoading ? <div className="search-empty" role="status"><p>Loading search…</p></div> : searchError ? (
+            <div className="search-empty" role="status"><p>Search couldn’t load. Please try again.</p><button className="button" onClick={() => setSearchAttempt(n => n + 1)}>Retry search</button></div>
+          ) : query.trim() ? (
             results.length > 0 ? (
               <div className="search-results">
                 {results.map((item, i) => (
@@ -156,7 +157,7 @@ export function SiteHeader({
               <div className="search-empty"><span>⚡</span><p>Start typing to search across the entire Sports Week</p></div>
             </div>
           )}
-          <div className="sr-only" role="status">{query.trim() && `${results.length} results found`}</div>
+          <div className="sr-only" role="status">{!searchLoading && !searchError && query.trim() && `${results.length} results found`}</div>
           <div className="search-hint"><span><kbd>Esc</kbd> to close</span><span><kbd>Ctrl / ⌘ K</kbd> to open</span></div>
         </div>
       </dialog>
