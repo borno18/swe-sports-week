@@ -80,6 +80,7 @@ export function NewSectionForm({ sports }: { sports: Sport[] }) {
           >
             <option value="knockout">Single Elimination Knockout</option>
             <option value="round_robin">Round Robin / Group Stage (Everyone plays everyone)</option>
+            <option value="flexible">Flexible Knockout (2–50 players, dynamic rounds)</option>
           </select>
         </label>
         <label>
@@ -177,7 +178,7 @@ export function TournamentEditor({
         <div>
           <span className="eyebrow">
             {tournament.entryKind === "team" ? "Team" : "Player"} ·{" "}
-            {tournament.bracket.format === "round_robin" ? "Group Stage" : "Knockout"}
+            {tournament.bracket.format === "round_robin" ? "Group Stage" : tournament.bracket.format === "flexible" ? "Flexible Knockout" : "Knockout"}
             {tournament.bracket.legs === 2 ? " (2 Legs)" : ""}
           </span>
           <h2>{tournament.title}</h2>
@@ -217,6 +218,7 @@ export function TournamentEditor({
                   >
                     <option value="knockout">Single Elimination Knockout (Odd teams get byes)</option>
                     <option value="round_robin">Round Robin / Group Stage (Every team plays each other)</option>
+                    <option value="flexible">Flexible Knockout (2–50 players, dynamic rounds)</option>
                   </select>
                 </label>
                 <label>
@@ -239,7 +241,9 @@ export function TournamentEditor({
                 ? "Keep the same order and number of entries. Name corrections update every match without resetting scores."
                 : lineupFormat === "round_robin"
                   ? "Enter 2–64 names. A complete round-robin fixture list will be generated automatically for any number of teams."
-                  : "Enter 2–64 names. Paired from top to bottom; extra places receive byes and advance automatically."}
+                  : lineupFormat === "flexible"
+                    ? "Enter 2–50 names. Rounds are computed dynamically — e.g. 9–16 players → 4 rounds. Preliminary matches pair extra players; the rest get byes."
+                    : "Enter 2–64 names. Paired from top to bottom; extra places receive byes and advance automatically."}
             </p>
             <LineupNames
               key={tournament.version}
@@ -258,6 +262,10 @@ export function TournamentEditor({
             {tournament.bracket.format === "round_robin" ? (
               <>
                 <b>Round Robin League:</b> Click <i>Score / Details</i> to record fixture dates, venues, and scores. Standings and goal difference update automatically.
+              </>
+            ) : tournament.bracket.format === "flexible" ? (
+              <>
+                <b>Flexible Knockout:</b> Click a player&apos;s name to choose the winner. Winners advance to the next round automatically. Use <i>Details</i> for dates, venues, and scores.
               </>
             ) : (
               <>

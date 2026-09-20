@@ -12,6 +12,7 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
   if (!sport) notFound();
   const sections = tournaments.filter(t => t.sportSlug === slug);
   const hasLeague = sections.some(s => s.bracket.format === "round_robin");
+  const hasFlexible = sections.some(s => s.bracket.format === "flexible");
 
   return (
     <div className="sport-page" style={{ "--sport-color": sport.color } as React.CSSProperties}>
@@ -24,7 +25,7 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
         <div className="sport-summary">
           <span><Users /> <b>{sport.participants}</b> Players / teams</span>
           <span><CalendarDays /> <b>{sport.matches}</b> Matches</span>
-          <span><Trophy /> {hasLeague ? (sections.some(s => s.bracket.format !== "round_robin") ? "League & knockout" : "Round robin league") : "Single elimination"}</span>
+          <span><Trophy /> {hasLeague ? (sections.some(s => s.bracket.format !== "round_robin") ? "League & knockout" : "Round robin league") : hasFlexible ? "Flexible knockout" : "Single elimination"}</span>
         </div>
       </header>
       <div className="public-brackets">
@@ -48,7 +49,7 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
           <section className="public-bracket-section" id={`section-${t.id}`} key={t.id}>
             <h2>{t.title}</h2>
             <p className="result-count">
-              {t.bracket.entries.length} {t.entryKind === "team" ? "teams / pairs" : "players"} · {t.bracket.format === "round_robin" ? "Round Robin League" : "Knockout"}
+              {t.bracket.entries.length} {t.entryKind === "team" ? "teams / pairs" : "players"} · {t.bracket.format === "round_robin" ? "Round Robin League" : t.bracket.format === "flexible" ? "Flexible Knockout" : "Knockout"}
               {t.bracket.legs === 2 ? " (2 Legs)" : ""}
             </p>
             {t.bracket.format === "round_robin" ? (

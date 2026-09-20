@@ -23,7 +23,7 @@ export type BracketMatch = {
   venue2?: string;
 };
 
-export type TournamentFormat = "knockout" | "round_robin";
+export type TournamentFormat = "knockout" | "round_robin" | "flexible";
 
 export type Bracket = {
   entries: Entry[];
@@ -58,14 +58,19 @@ export function roundName(index: number, count: number, format: TournamentFormat
   if (format === "round_robin") {
     return `Round ${index + 1}`;
   }
+  if (format === "flexible") {
+    if (index === count - 1) return "Final";
+    if (index === count - 2 && count >= 2) return "Semi-finals";
+    return `Round ${index + 1}`;
+  }
   const remaining = 2 ** (count - index);
   return remaining === 2 ? "Final" : remaining === 4 ? "Semi-finals" : remaining === 8 ? "Quarter-finals" : `Round of ${remaining}`;
 }
 
-export function parseNames(text: string) {
-  if (text.length > 6000) throw new Error("Please enter no more than 64 names, up to 80 characters each.");
+export function parseNames(text: string, maxEntries: number = 64) {
+  if (text.length > 6000) throw new Error(`Please enter no more than ${maxEntries} names, up to 80 characters each.`);
   const names = text.split(/\r?\n/).map(name => name.trim()).filter(Boolean);
-  if (names.length < 2 || names.length > 64) throw new Error("Enter between 2 and 64 players or teams, one per line.");
+  if (names.length < 2 || names.length > maxEntries) throw new Error(`Enter between 2 and ${maxEntries} players or teams, one per line.`);
   if (names.some(name => name.length > 80 || /[\u0000-\u001f\u007f]/.test(name))) throw new Error("Each name must be 1–80 characters without control characters.");
   if (new Set(names.map(name => name.toLocaleLowerCase())).size !== names.length) throw new Error("Names must be unique within this section. Add a batch or team label to distinguish them.");
   return names;
@@ -107,6 +112,50 @@ export function createBracket(text: string, legs: number = 1): Bracket {
     if (!match.b) { match.bye = true; match.winner = match.a; }
   });
   return propagate({ entries, rounds, format: "knockout", legs: matchLegs });
+}
+
+export function createFlexibleBracket(text: string, legs: number = 1): Bracket {
+  const names = parseNames(text, 50);
+  const entries = names.map((name, index) => ({ id: `p${index + 1}`, name }));
+  const n = entries.length;
+  const totalRounds = Math.ceil(Math.log2(n));
+  const fullSize = 2 ** totalRounds; // nearest power-of-2 >= n
+  const matchLegs = legs === 2 ? 2 : 1;
+
+  // Build all rounds with the right match counts
+  const rounds: BracketMatch[][] = Array.from({ length: totalRounds }, (_, round) =>
+    Array.from({ length: fullSize / 2 ** (round + 1) }, (_, position) => ({
+      id: `r${round + 1}m${position + 1}`,
+      round,
+      position,
+      a: null,
+      b: null,
+      winner: null,
+      bye: false,
+      date: "",
+      time: "",
+      venue: "",
+      scoreA: "",
+      scoreB: "",
+      completedAt: null,
+      legs: matchLegs,
+      scoreA2: matchLegs === 2 ? "" : undefined,
+      scoreB2: matchLegs === 2 ? "" : undefined,
+      date2: matchLegs === 2 ? "" : undefined,
+      time2: matchLegs === 2 ? "" : undefined,
+      venue2: matchLegs === 2 ? "" : undefined,
+    })));
+
+  // Seed round 1: pair entries top-to-bottom, extras beyond fullSize/2 get matches, rest get byes
+  let entry = 0;
+  const contested = n - fullSize / 2; // how many "extra" players need preliminary matches
+  rounds[0].forEach((match, index) => {
+    match.a = entries[entry++].id;
+    match.b = index < contested ? entries[entry++].id : null;
+    if (!match.b) { match.bye = true; match.winner = match.a; }
+  });
+
+  return propagate({ entries, rounds, format: "flexible", legs: matchLegs });
 }
 
 export function createRoundRobin(text: string, legs: number = 1): Bracket {
@@ -170,6 +219,7 @@ export function createRoundRobin(text: string, legs: number = 1): Bracket {
 
 function propagate(bracket: Bracket) {
   if (bracket.format === "round_robin") return bracket;
+  // Both knockout and flexible use the same tree-based propagation
   for (let round = 1; round < bracket.rounds.length; round++) {
     for (const match of bracket.rounds[round]) {
       const a = bracket.rounds[round - 1][match.position * 2].winner;
@@ -193,6 +243,7 @@ export function chooseWinner(source: Bracket, matchId: string, entryId: string |
   if (match.bye) throw new Error("Byes advance automatically.");
 
   if (bracket.format === "round_robin") {
+    // flexible and knockout share the same final-match champion logic
     if (entryId !== null && (!match.a || !match.b || ![match.a, match.b, "draw"].includes(entryId))) {
       throw new Error("Choose team A, team B, or Draw as the result.");
     }
@@ -302,6 +353,7 @@ export function championOf(bracket: Bracket) {
     return null;
   }
 
+  // knockout and flexible: champion is the winner of the final match
   const final = bracket.rounds.at(-1)?.[0];
   if (!final?.winner) return null;
   return {

@@ -102,7 +102,8 @@ export const getTournamentData = cache(async () => {
     const sections = tournaments.filter(t => t.sportSlug === sport.slug);
     const published = sections.filter(t => t.bracket.rounds.length);
     const hasRoundRobin = sections.some(t => t.bracket.format === "round_robin");
-    const formatLabel = hasRoundRobin ? "Group / League" : "Knockout";
+    const hasFlexible = sections.some(t => t.bracket.format === "flexible");
+    const formatLabel = hasRoundRobin ? "Group / League" : hasFlexible ? "Flexible Knockout" : "Knockout";
 
     return {
       ...sport,

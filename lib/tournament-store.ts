@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   chooseWinner,
   createBracket,
+  createFlexibleBracket,
   createRoundRobin,
   renameEntries,
   type Tournament,
@@ -169,6 +170,8 @@ export async function mutateTournament(
         const chosenLegs = mutation.legs || bracket.legs || 1;
         if (chosenFormat === "round_robin") {
           bracket = createRoundRobin(mutation.names, chosenLegs);
+        } else if (chosenFormat === "flexible") {
+          bracket = createFlexibleBracket(mutation.names, chosenLegs);
         } else {
           bracket = createBracket(mutation.names, chosenLegs);
         }
