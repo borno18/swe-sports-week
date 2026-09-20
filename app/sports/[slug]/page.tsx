@@ -5,6 +5,7 @@ import { getTournamentData } from "@/lib/tournaments";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
 import { FlexibleBracketView } from "@/components/flexible-bracket-view";
+import { GameRulesCard } from "@/components/game-rules-card";
 
 export default async function SportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -30,6 +31,9 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
         </div>
       </header>
       <div className="public-brackets">
+        {/* Official Rules & Match Format */}
+        <GameRulesCard sportSlug={slug} />
+
         <div className="section-heading">
           <div>
             <span className="eyebrow">From the first round to the final</span>
