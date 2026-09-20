@@ -7,8 +7,15 @@ import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
 import { FlexibleBracketView } from "@/components/flexible-bracket-view";
 import { GameRulesCard } from "@/components/game-rules-card";
-import type { BracketMatch, Tournament, TournamentFormat } from "@/lib/bracket";
+import {
+  roundName,
+  getMatchParticipants,
+  type BracketMatch,
+  type Tournament,
+  type TournamentFormat,
+} from "@/lib/bracket";
 import type { Sport, GameRule } from "@/lib/data";
+import { Plus, Trash2, UserPlus, Users, X } from "lucide-react";
 
 const initial: ActionResult = { ok: false, message: "" };
 
@@ -82,8 +89,22 @@ export function NewSectionForm({ sports }: { sports: Sport[] }) {
           >
             <option value="knockout">Single Elimination Knockout</option>
             <option value="round_robin">Round Robin / Group Stage (Everyone plays everyone)</option>
-            <option value="flexible">Flexible Knockout (2–50 players, dynamic rounds)</option>
+            <option value="flexible">Flexible Knockout (Dynamic rounds &amp; matches)</option>
           </select>
+        </label>
+        <label>
+          Players / Teams per Game
+          <select name="playersPerGame" defaultValue="2">
+            <option value="2">2 Players / Teams (Head-to-head / 1v1)</option>
+            <option value="3">3 Players / Teams (3-Way / Trios)</option>
+            <option value="4">4 Players / Teams (Quad / Doubles)</option>
+            <option value="6">6 Players / Teams</option>
+            <option value="8">8 Players / Teams (Battle Royale)</option>
+          </select>
+        </label>
+        <label>
+          Total Games / Matches (Optional)
+          <input type="number" name="totalGames" min={1} max={100} placeholder="Auto (calculated from entries)" />
         </label>
         <label>
           Matches per Tie
@@ -117,8 +138,15 @@ export function TournamentEditor({
   const [undo, setUndo] = useState<BracketMatch | null>(null);
   const [lineupFormat, setLineupFormat] = useState<TournamentFormat>(tournament.bracket.format || "knockout");
   const [lineupLegs, setLineupLegs] = useState<number>(tournament.bracket.legs || 1);
+  const [lineupPlayersPerGame, setLineupPlayersPerGame] = useState<number>(tournament.bracket.playersPerGame || 2);
+  const [lineupTotalGames, setLineupTotalGames] = useState<string>(tournament.bracket.totalGames ? String(tournament.bracket.totalGames) : "");
+
+  const [showAddMatch, setShowAddMatch] = useState<boolean>(false);
+  const [addMatchRound, setAddMatchRound] = useState<number>(1);
+  const [selectedEntryToAdd, setSelectedEntryToAdd] = useState<string>("");
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const addMatchDialogRef = useRef<HTMLDialogElement>(null);
   const published = tournament.bracket.rounds.length > 0;
   const busy = pending || saving;
   const router = useRouter();
@@ -129,10 +157,17 @@ export function TournamentEditor({
   }, [details, undo]);
 
   useEffect(() => {
+    if (showAddMatch) addMatchDialogRef.current?.showModal();
+    else addMatchDialogRef.current?.close();
+  }, [showAddMatch]);
+
+  useEffect(() => {
     setResult(initial);
     if (state.ok) {
       setDetails(null);
       setUndo(null);
+      setShowAddMatch(false);
+      setSelectedEntryToAdd("");
       if (state.message?.includes("permanently deleted")) {
         router.push("/admin");
       }
@@ -227,10 +262,37 @@ export function TournamentEditor({
                     value={lineupFormat}
                     onChange={e => setLineupFormat(e.target.value as TournamentFormat)}
                   >
-                    <option value="knockout">Single Elimination Knockout (Odd teams get byes)</option>
+                    <option value="knockout">Single Elimination Knockout</option>
                     <option value="round_robin">Round Robin / Group Stage (Every team plays each other)</option>
-                    <option value="flexible">Flexible Knockout (2–50 players, dynamic rounds)</option>
+                    <option value="flexible">Flexible Knockout (Dynamic rounds &amp; matches)</option>
                   </select>
+                </label>
+                <label>
+                  Players / Teams per Game
+                  <select
+                    name="playersPerGame"
+                    value={lineupPlayersPerGame}
+                    onChange={e => setLineupPlayersPerGame(Number(e.target.value))}
+                  >
+                    <option value={2}>2 Players / Teams (1v1 / Head-to-head)</option>
+                    <option value={3}>3 Players / Teams (3-Way / Trios)</option>
+                    <option value={4}>4 Players / Teams (Quad / 4-Player)</option>
+                    <option value={5}>5 Players / Teams</option>
+                    <option value={6}>6 Players / Teams</option>
+                    <option value={8}>8 Players / Teams</option>
+                  </select>
+                </label>
+                <label>
+                  Total Games / Matches (Optional)
+                  <input
+                    type="number"
+                    name="totalGames"
+                    min={1}
+                    max={100}
+                    value={lineupTotalGames}
+                    onChange={e => setLineupTotalGames(e.target.value)}
+                    placeholder="Auto (based on entries)"
+                  />
                 </label>
                 <label>
                   Match Format / Legs
@@ -269,6 +331,28 @@ export function TournamentEditor({
 
       {published && (
         <>
+          {canEditLineup && (
+            <div className="bracket-admin-toolbar">
+              <div className="bracket-admin-info">
+                <span className="badge">
+                  <Users size={14} /> {tournament.bracket.playersPerGame || 2} players/teams per game
+                </span>
+                {Boolean(tournament.bracket.totalGames) && (
+                  <span className="badge">
+                    🎯 {tournament.bracket.totalGames} total games configured
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="button button-sm add-game-btn"
+                onClick={() => setShowAddMatch(true)}
+              >
+                <Plus size={14} /> Add Game / Match
+              </button>
+            </div>
+          )}
+
           <p className="editor-instruction">
             {tournament.bracket.format === "round_robin" ? (
               <>
@@ -395,90 +479,242 @@ export function TournamentEditor({
           </form>
         ) : (
           details && (
-            <form action={action} className="organizer-form">
-              {hidden}
-              <input type="hidden" name="kind" value="details" />
-              <input type="hidden" name="matchId" value={details.id} />
+            (() => {
+              const participants = getMatchParticipants(details);
+              return (
+                <form action={action} className="organizer-form">
+                  {hidden}
+                  <input type="hidden" name="kind" value="details" />
+                  <input type="hidden" name="matchId" value={details.id} />
 
-              {/* Leg 1 */}
-              <div className="match-leg-section">
-                {is2LegMatch && <span className="leg-kicker">Leg 1 Details</span>}
-                <div className="form-row-2">
-                  <label>
-                    Date
-                    <input type="date" name="date" defaultValue={details.date} />
-                  </label>
-                  <label>
-                    Time (Bangladesh)
-                    <input type="time" name="time" defaultValue={details.time} />
-                  </label>
-                </div>
-                <label>
-                  Venue
-                  <input name="venue" defaultValue={details.venue} maxLength={100} />
-                </label>
+                  <div className="match-participants-section">
+                    <span className="leg-kicker">Participants &amp; Scores ({participants.length} Players/Teams)</span>
+                    <div className="participants-score-list">
+                      {participants.map((pId, idx) => {
+                        const entry = tournament.bracket.entries.find(e => e.id === pId);
+                        const name = entry?.name || (pId ? "Unknown" : "TBD");
+                        const currentScore = details.scores?.[pId] ?? (idx === 0 ? details.scoreA : idx === 1 ? details.scoreB : "");
+                        return (
+                          <div key={pId || idx} className="participant-score-row">
+                            <div className="participant-badge-name">
+                              <span className="participant-idx">#{idx + 1}</span>
+                              <span className="participant-name">{name}</span>
+                            </div>
+                            <div className="participant-score-input-wrap">
+                              <input
+                                name={`score_${pId}`}
+                                type="number"
+                                min={0}
+                                max={9999}
+                                step={1}
+                                placeholder="Score"
+                                defaultValue={currentScore}
+                                className="participant-score-input"
+                              />
+                              {canEditLineup && pId && (
+                                <button
+                                  type="button"
+                                  className="remove-participant-btn"
+                                  title="Remove from game"
+                                  onClick={() => {
+                                    const form = fields("remove_participant");
+                                    form.set("matchId", details.id);
+                                    form.set("entryId", pId);
+                                    startTransition(async () => {
+                                      const res = await saveTournament(initial, form);
+                                      setResult(res);
+                                      if (res.ok) setDetails(null);
+                                    });
+                                  }}
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                <div className="form-row-2">
-                  {(["a", "b"] as const).map(side => (
-                    <label key={side}>
-                      {tournament.bracket.entries.find(entry => entry.id === details[side])?.name ?? "Opponent"} {is2LegMatch ? "(Leg 1 score)" : "score"}
-                      <input
-                        name={side === "a" ? "scoreA" : "scoreB"}
-                        type="number"
-                        min={0}
-                        max={999}
-                        step={1}
-                        disabled={!details.a || !details.b}
-                        defaultValue={side === "a" ? details.scoreA : details.scoreB}
-                      />
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Leg 2 if configured */}
-              {is2LegMatch && (
-                <div className="match-leg-section leg-2">
-                  <span className="leg-kicker">Leg 2 Details (Return Leg)</span>
-                  <div className="form-row-2">
-                    <label>
-                      Leg 2 Date
-                      <input type="date" name="date2" defaultValue={details.date2} />
-                    </label>
-                    <label>
-                      Leg 2 Time
-                      <input type="time" name="time2" defaultValue={details.time2} />
-                    </label>
+                    {canEditLineup && (
+                      <div className="add-participant-to-match">
+                        <select
+                          value={selectedEntryToAdd}
+                          onChange={e => setSelectedEntryToAdd(e.target.value)}
+                          className="add-participant-select"
+                        >
+                          <option value="">-- Add player/team to this game --</option>
+                          {tournament.bracket.entries
+                            .filter(e => !participants.includes(e.id))
+                            .map(e => (
+                              <option key={e.id} value={e.id}>
+                                {e.name}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="button button-sm"
+                          disabled={!selectedEntryToAdd || busy}
+                          onClick={() => {
+                            if (!selectedEntryToAdd) return;
+                            const form = fields("add_participant");
+                            form.set("matchId", details.id);
+                            form.set("entryId", selectedEntryToAdd);
+                            startTransition(async () => {
+                              const res = await saveTournament(initial, form);
+                              setResult(res);
+                              setSelectedEntryToAdd("");
+                              if (res.ok) setDetails(null);
+                            });
+                          }}
+                        >
+                          <UserPlus size={14} /> Add
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <label>
-                    Leg 2 Venue
-                    <input name="venue2" defaultValue={details.venue2} maxLength={100} />
-                  </label>
-                  <div className="form-row-2">
-                    {(["a", "b"] as const).map(side => (
-                      <label key={side}>
-                        {tournament.bracket.entries.find(entry => entry.id === details[side])?.name ?? "Opponent"} (Leg 2 score)
-                        <input
-                          name={side === "a" ? "scoreA2" : "scoreB2"}
-                          type="number"
-                          min={0}
-                          max={999}
-                          step={1}
-                          disabled={!details.a || !details.b}
-                          defaultValue={side === "a" ? details.scoreA2 : details.scoreB2}
-                        />
+
+                  {/* Leg 1 Timing & Venue */}
+                  <div className="match-leg-section">
+                    {is2LegMatch && <span className="leg-kicker">Leg 1 Timing &amp; Venue</span>}
+                    <div className="form-row-2">
+                      <label>
+                        Date
+                        <input type="date" name="date" defaultValue={details.date} />
                       </label>
-                    ))}
+                      <label>
+                        Time (Bangladesh)
+                        <input type="time" name="time" defaultValue={details.time} />
+                      </label>
+                    </div>
+                    <label>
+                      Venue
+                      <input name="venue" defaultValue={details.venue} maxLength={100} />
+                    </label>
                   </div>
-                </div>
-              )}
 
-              <button className="button organizer-primary" disabled={busy}>
-                {pending ? "Saving…" : "Save details"}
-              </button>
-            </form>
+                  {/* Leg 2 if configured */}
+                  {is2LegMatch && (
+                    <div className="match-leg-section leg-2">
+                      <span className="leg-kicker">Leg 2 Details (Return Leg)</span>
+                      <div className="form-row-2">
+                        <label>
+                          Leg 2 Date
+                          <input type="date" name="date2" defaultValue={details.date2} />
+                        </label>
+                        <label>
+                          Leg 2 Time
+                          <input type="time" name="time2" defaultValue={details.time2} />
+                        </label>
+                      </div>
+                      <label>
+                        Leg 2 Venue
+                        <input name="venue2" defaultValue={details.venue2} maxLength={100} />
+                      </label>
+                      <div className="form-row-2">
+                        {(["a", "b"] as const).map(side => (
+                          <label key={side}>
+                            {tournament.bracket.entries.find(entry => entry.id === details[side])?.name ?? "Opponent"} (Leg 2 score)
+                            <input
+                              name={side === "a" ? "scoreA2" : "scoreB2"}
+                              type="number"
+                              min={0}
+                              max={999}
+                              step={1}
+                              disabled={!details.a || !details.b}
+                              defaultValue={side === "a" ? details.scoreA2 : details.scoreB2}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="match-dialog-footer">
+                    <button className="button organizer-primary" disabled={busy}>
+                      {pending ? "Saving…" : "Save details"}
+                    </button>
+                    {canEditLineup && (
+                      <button
+                        type="button"
+                        className="button danger-button button-sm"
+                        disabled={busy}
+                        onClick={() => {
+                          if (!confirm("Are you sure you want to delete this game?")) return;
+                          const form = fields("delete_match");
+                          form.set("matchId", details.id);
+                          startTransition(async () => {
+                            const res = await saveTournament(initial, form);
+                            setResult(res);
+                            if (res.ok) setDetails(null);
+                          });
+                        }}
+                      >
+                        <Trash2 size={14} /> Delete Game
+                      </button>
+                    )}
+                  </div>
+                </form>
+              );
+            })()
           )
         )}
+      </dialog>
+
+      {/* Add New Game / Match Dialog */}
+      <dialog
+        className="editor-dialog add-match-dialog"
+        ref={addMatchDialogRef}
+        onCancel={() => setShowAddMatch(false)}
+        onClose={() => setShowAddMatch(false)}
+      >
+        <div className="dialog-heading">
+          <h3>Add New Game / Match</h3>
+          <button
+            type="button"
+            className="filter"
+            disabled={busy}
+            onClick={() => setShowAddMatch(false)}
+          >
+            Close
+          </button>
+        </div>
+        <form action={action} className="organizer-form" onSubmit={() => setShowAddMatch(false)}>
+          {hidden}
+          <input type="hidden" name="kind" value="add_match" />
+          <label>
+            Round
+            <select
+              name="round"
+              value={addMatchRound}
+              onChange={e => setAddMatchRound(Number(e.target.value))}
+            >
+              {tournament.bracket.rounds.map((_, roundIdx) => (
+                <option key={roundIdx + 1} value={roundIdx + 1}>
+                  Round {roundIdx + 1} ({roundName(roundIdx, tournament.bracket.rounds.length, tournament.bracket.format || "knockout")})
+                </option>
+              ))}
+              <option value={tournament.bracket.rounds.length + 1}>
+                New Round {tournament.bracket.rounds.length + 1}
+              </option>
+            </select>
+          </label>
+          <div className="add-match-participants-picker">
+            <label>Select Players / Teams for this Game (optional, can be TBD)</label>
+            <div className="participants-checkbox-list">
+              {tournament.bracket.entries.map(entry => (
+                <label key={entry.id} className="checkbox-item">
+                  <input type="checkbox" name="participantIds" value={entry.id} />
+                  <span>{entry.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <button className="button organizer-primary" disabled={busy}>
+            <Plus size={14} /> Create Game
+          </button>
+        </form>
       </dialog>
     </div>
   );

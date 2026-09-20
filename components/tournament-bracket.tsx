@@ -246,63 +246,79 @@ export function TournamentBracket({
                             {is2Leg && <strong className="ko-leg-pill"> 2 Legs</strong>}
                           </span>
                           <span
-                            className={`ko-status${match.winner ? " ft" : match.bye ? " bye" : match.a && match.b ? " ready" : ""}`}
+                            className={`ko-status${match.winner ? " ft" : match.bye ? " bye" : (match.participants?.length ?? 0) >= 2 || (match.a && match.b) ? " ready" : ""}`}
                           >
-                            {match.bye ? "BYE" : match.winner ? "FT" : match.a && match.b ? "●" : ""}
+                            {match.bye ? "BYE" : match.winner ? "FT" : ((match.participants?.length ?? 0) >= 2 || (match.a && match.b)) ? "●" : ""}
                           </span>
                         </div>
 
-                        {/* Entrants */}
-                        {(["a", "b"] as const).map((side) => {
-                          const id = match[side];
-                          const isWinner = !!id && match.winner === id;
-                          const isLoser = !!match.winner && !isWinner && !!id;
-                          const name = id ? entries.get(id) ?? "Unknown" : match.bye ? "Bye" : roundIndex ? `TBD` : "—";
+                        {/* Entrants (supports >= 2 players/teams per game) */}
+                        {(() => {
+                          const rawParticipants = match.participants && match.participants.length > 0
+                            ? match.participants
+                            : [match.a, match.b].filter((x): x is string => !!x);
 
-                          let scoreDisplay = side === "a" ? match.scoreA : match.scoreB;
-                          const s2 = side === "a" ? match.scoreA2 : match.scoreB2;
-                          if (is2Leg && s2) {
-                            const agg = (Number(scoreDisplay) || 0) + (Number(s2) || 0);
-                            scoreDisplay = `${scoreDisplay || "0"}+${s2} (${agg})`;
-                          }
+                          const displayIds = rawParticipants.length > 0
+                            ? rawParticipants
+                            : [match.a ?? null, match.b ?? null];
 
-                          const initials = getInitials(name);
+                          return displayIds.map((id, pIndex) => {
+                            const isWinner = !!id && (match.winner === id || match.advancers?.includes(id));
+                            const isLoser = !!match.winner && !isWinner && !!id;
+                            const name = id ? entries.get(id) ?? "Unknown" : match.bye ? "Bye" : roundIndex ? `TBD` : "—";
 
-                          const row = (
-                            <>
-                              <span className="ko-crest" aria-hidden="true">
-                                {initials}
-                              </span>
-                              <span className="ko-name" title={name}>
-                                {name}
-                              </span>
-                              {scoreDisplay !== undefined && scoreDisplay !== "" && (
-                                <span className="ko-score">{scoreDisplay}</span>
-                              )}
-                              {isWinner && <span className="ko-tick">✓</span>}
-                            </>
-                          );
+                            let scoreDisplay = id && match.scores?.[id] !== undefined
+                              ? match.scores[id]
+                              : pIndex === 0
+                                ? match.scoreA
+                                : pIndex === 1
+                                  ? match.scoreB
+                                  : "";
 
-                          return onWinner ? (
-                            <button
-                              key={side}
-                              type="button"
-                              className={`ko-entry${isWinner ? " w" : isLoser ? " l" : ""}`}
-                              disabled={busy || !match.a || !match.b || !!match.winner}
-                              aria-label={isWinner ? `${name}, winner` : `Choose ${name} as winner`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                id && onWinner(match, id);
-                              }}
-                            >
-                              {row}
-                            </button>
-                          ) : (
-                            <div key={side} className={`ko-entry${isWinner ? " w" : isLoser ? " l" : ""}`}>
-                              {row}
-                            </div>
-                          );
-                        })}
+                            const s2 = pIndex === 0 ? match.scoreA2 : pIndex === 1 ? match.scoreB2 : undefined;
+                            if (is2Leg && s2) {
+                              const agg = (Number(scoreDisplay) || 0) + (Number(s2) || 0);
+                              scoreDisplay = `${scoreDisplay || "0"}+${s2} (${agg})`;
+                            }
+
+                            const initials = getInitials(name);
+
+                            const row = (
+                              <>
+                                <span className="ko-crest" aria-hidden="true">
+                                  {initials}
+                                </span>
+                                <span className="ko-name" title={name}>
+                                  {name}
+                                </span>
+                                {scoreDisplay !== undefined && scoreDisplay !== "" && (
+                                  <span className="ko-score">{scoreDisplay}</span>
+                                )}
+                                {isWinner && <span className="ko-tick">✓</span>}
+                              </>
+                            );
+
+                            return onWinner ? (
+                              <button
+                                key={id || `slot-${pIndex}`}
+                                type="button"
+                                className={`ko-entry${isWinner ? " w" : isLoser ? " l" : ""}`}
+                                disabled={busy || !id || !!match.winner}
+                                aria-label={isWinner ? `${name}, winner` : `Choose ${name} as winner`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  id && onWinner(match, id);
+                                }}
+                              >
+                                {row}
+                              </button>
+                            ) : (
+                              <div key={id || `slot-${pIndex}`} className={`ko-entry${isWinner ? " w" : isLoser ? " l" : ""}`}>
+                                {row}
+                              </div>
+                            );
+                          });
+                        })()}
 
                         {/* Final Pill Badge (Matching the user photo) */}
                         {isFinal && (

@@ -1,6 +1,8 @@
 import type { Client } from "@libsql/client";
 import { randomUUID } from "node:crypto";
 import {
+  addMatchToTournament,
+  addParticipantToMatch,
   chooseWinner,
   createBracket,
   createFlexibleBracket,
@@ -10,10 +12,14 @@ import {
   flexRemoveMatch,
   flexSetAdvancers,
   flexUpdateParticipants,
+  getMatchParticipants,
+  removeMatchFromTournament,
+  removeParticipantFromMatch,
   renameEntries,
   type Tournament,
   type Bracket,
   type TournamentFormat,
+  type BracketOptions,
 } from "./bracket.ts";
 
 type Row = {
@@ -31,6 +37,8 @@ export type Mutation =
       names: string;
       format?: TournamentFormat;
       legs?: number;
+      playersPerGame?: number;
+      totalGames?: number;
     }
   | { kind: "winner"; matchId: string; entryId: string | null }
   | { kind: "reset" }
@@ -47,7 +55,13 @@ export type Mutation =
       venue2?: string;
       scoreA2?: string;
       scoreB2?: string;
+      scores?: Record<string, string>;
+      participants?: string[];
     }
+  | { kind: "add_match"; round: number; participantIds: string[] }
+  | { kind: "delete_match"; matchId: string }
+  | { kind: "add_participant"; matchId: string; participantId: string }
+  | { kind: "remove_participant"; matchId: string; participantId: string }
   | { kind: "flex_add_match"; round: number; participantIds: string[] }
   | { kind: "flex_remove_match"; matchId: string }
   | { kind: "flex_set_advancers"; matchId: string; advancerIds: string[] }
@@ -101,7 +115,9 @@ export async function addTournament(
   title: string,
   entryKind: string,
   format: TournamentFormat = "knockout",
-  legs: number = 1
+  legs: number = 1,
+  playersPerGame: number = 2,
+  totalGames?: number
 ): Promise<string> {
   title = title.trim();
   if (!title || title.length > 80 || /[\u0000-\u001f]/.test(title)) {
@@ -125,6 +141,8 @@ export async function addTournament(
     rounds: [],
     format,
     legs: legs === 2 ? 2 : 1,
+    playersPerGame: Math.max(2, playersPerGame || 2),
+    totalGames: totalGames && totalGames > 0 ? totalGames : undefined,
   };
 
   await db.execute({
@@ -178,12 +196,15 @@ export async function mutateTournament(
         if (bracket.rounds.length) throw new Error("This bracket is already published. Rename entries or reset it first.");
         const chosenFormat = mutation.format || bracket.format || "knockout";
         const chosenLegs = mutation.legs || bracket.legs || 1;
+        const pPerGame = mutation.playersPerGame || bracket.playersPerGame || 2;
+        const totalG = mutation.totalGames || bracket.totalGames;
+        const opts: BracketOptions = { legs: chosenLegs, playersPerGame: pPerGame, totalGames: totalG };
         if (chosenFormat === "round_robin") {
-          bracket = createRoundRobin(mutation.names, chosenLegs);
+          bracket = createRoundRobin(mutation.names, opts);
         } else if (chosenFormat === "flexible") {
-          bracket = createFlexibleBracket(mutation.names);
+          bracket = createFlexibleBracket(mutation.names, opts);
         } else {
-          bracket = createBracket(mutation.names, chosenLegs);
+          bracket = createBracket(mutation.names, opts);
         }
         break;
       }
@@ -196,6 +217,8 @@ export async function mutateTournament(
           rounds: [],
           format: bracket.format || "knockout",
           legs: bracket.legs || 1,
+          playersPerGame: bracket.playersPerGame || 2,
+          totalGames: bracket.totalGames,
         };
         break;
       case "winner":
@@ -221,9 +244,6 @@ export async function mutateTournament(
         if (![mutation.scoreA, mutation.scoreB].every(score => score === "" || /^\d{1,3}$/.test(score))) {
           throw new Error("Scores must be whole numbers from 0 to 999, or blank.");
         }
-        if ((!match.a || !match.b) && (mutation.scoreA || mutation.scoreB)) {
-          throw new Error("Wait for both opponents before entering scores.");
-        }
 
         // Leg 2 validation if present
         if (mutation.scoreA2 !== undefined && mutation.scoreB2 !== undefined) {
@@ -244,8 +264,32 @@ export async function mutateTournament(
           time2: mutation.time2 !== undefined ? mutation.time2 : match.time2,
           venue2: mutation.venue2 !== undefined ? mutation.venue2.trim() : match.venue2,
         });
+
+        if (mutation.scores) {
+          match.scores = { ...(match.scores || {}), ...mutation.scores };
+          const p = getMatchParticipants(match);
+          if (p[0] && mutation.scores[p[0]] !== undefined) match.scoreA = mutation.scores[p[0]];
+          if (p[1] && mutation.scores[p[1]] !== undefined) match.scoreB = mutation.scores[p[1]];
+        }
+        if (mutation.participants) {
+          match.participants = mutation.participants;
+          if (!match.a) match.a = mutation.participants[0] ?? null;
+          if (!match.b) match.b = mutation.participants[1] ?? null;
+        }
         break;
       }
+      case "add_match":
+        bracket = addMatchToTournament(bracket, mutation.round, mutation.participantIds);
+        break;
+      case "delete_match":
+        bracket = removeMatchFromTournament(bracket, mutation.matchId);
+        break;
+      case "add_participant":
+        bracket = addParticipantToMatch(bracket, mutation.matchId, mutation.participantId);
+        break;
+      case "remove_participant":
+        bracket = removeParticipantFromMatch(bracket, mutation.matchId, mutation.participantId);
+        break;
       case "flex_add_match":
         bracket = flexAddMatch(bracket, mutation.round, mutation.participantIds);
         break;

@@ -15,7 +15,7 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
   if (!admin) return { ok: false, message: "Your session expired. Sign in again to save changes." };
   const kind = field(form, "kind");
 
-  if (admin.role === "RESULT_MANAGER" && !["winner", "details", "flex_set_advancers", "flex_add_round"].includes(kind)) {
+  if (admin.role === "RESULT_MANAGER" && !["winner", "details", "add_match", "delete_match", "add_participant", "remove_participant", "flex_set_advancers", "flex_add_round"].includes(kind)) {
     return { ok: false, message: "Only tournament organizers can edit lineups, formats, or delete sections." };
   }
 
@@ -32,8 +32,10 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
       const entryKind = field(form, "entryKind");
       const format = (field(form, "format") || "knockout") as TournamentFormat;
       const legs = Number(field(form, "legs")) === 2 ? 2 : 1;
+      const playersPerGame = Number(field(form, "playersPerGame")) || 2;
+      const totalGames = Number(field(form, "totalGames")) || undefined;
 
-      const id = await addTournament(db, sport, title, entryKind, format, legs);
+      const id = await addTournament(db, sport, title, entryKind, format, legs, playersPerGame, totalGames);
       revalidatePath("/", "layout");
       revalidatePath("/admin");
       return { ok: true, message: "Section created. Add its players or teams below.", id };
@@ -54,7 +56,9 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
       case "lineup": {
         const format = (field(form, "format") || undefined) as TournamentFormat | undefined;
         const legs = field(form, "legs") ? Number(field(form, "legs")) : undefined;
-        mutation = { kind, names: field(form, "names"), format, legs };
+        const playersPerGame = field(form, "playersPerGame") ? Number(field(form, "playersPerGame")) : undefined;
+        const totalGames = field(form, "totalGames") ? Number(field(form, "totalGames")) : undefined;
+        mutation = { kind, names: field(form, "names"), format, legs, playersPerGame, totalGames };
         break;
       }
       case "rename":
@@ -69,7 +73,13 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
       case "winner":
         mutation = { kind, matchId: field(form, "matchId"), entryId: field(form, "entryId") || null };
         break;
-      case "details":
+      case "details": {
+        const scores: Record<string, string> = {};
+        for (const [k, v] of form.entries()) {
+          if (k.startsWith("score_") && typeof v === "string" && v.trim() !== "") {
+            scores[k.replace("score_", "")] = v.trim();
+          }
+        }
         mutation = {
           kind,
           matchId: field(form, "matchId"),
@@ -83,7 +93,24 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
           venue2: field(form, "venue2") || undefined,
           scoreA2: field(form, "scoreA2") !== "" ? field(form, "scoreA2") : undefined,
           scoreB2: field(form, "scoreB2") !== "" ? field(form, "scoreB2") : undefined,
+          scores: Object.keys(scores).length > 0 ? scores : undefined,
         };
+        break;
+      }
+      case "add_match": {
+        const raw = form.getAll("participantIds");
+        const participantIds = raw.flatMap(r => typeof r === "string" ? r.split(",") : []).map(s => s.trim()).filter(Boolean);
+        mutation = { kind, round: Number(field(form, "round")), participantIds };
+        break;
+      }
+      case "delete_match":
+        mutation = { kind, matchId: field(form, "matchId") };
+        break;
+      case "add_participant":
+        mutation = { kind, matchId: field(form, "matchId"), participantId: field(form, "participantId") || field(form, "entryId") };
+        break;
+      case "remove_participant":
+        mutation = { kind, matchId: field(form, "matchId"), participantId: field(form, "participantId") || field(form, "entryId") };
         break;
       case "flex_add_match": {
         const participantIds = field(form, "participantIds").split(",").filter(Boolean);

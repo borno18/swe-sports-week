@@ -155,10 +155,10 @@
   font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em;
   color: #070936;
 }
-.ko-matches { height: calc(var(--first-matches) * var(--slot-h)); display: flex; flex-direction: column; }
+.ko-matches { min-height: calc(var(--first-matches) * var(--slot-h)); height: auto; display: flex; flex-direction: column; gap: 14px; }
 
 /* Individual match slot + connector lines */
-.ko-slot { position: relative; flex: 1; display: flex; align-items: center; }
+.ko-slot { position: relative; flex: 1; display: flex; align-items: center; min-height: 100px; }
 .has-line::after {
   content: ""; position: absolute; left: 100%; top: 50%;
   width: calc(var(--gap) / 2); height: 50%;
@@ -2012,5 +2012,188 @@ button.flex-player:hover:not(:disabled) {
   background: color-mix(in srgb, var(--sport-color, #72d2ff) 24%, #ddf6e8);
   border-color: color-mix(in srgb, var(--sport-color, #72d2ff) 60%, #0d5f34);
   color: #0d5f34;
+}
+
+/* ─────────────────────────────────────────────
+   ADMIN MATCH MANAGEMENT & PARTICIPANT SCORING
+   ───────────────────────────────────────────── */
+.bracket-admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.bracket-admin-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bracket-admin-info .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #f1f1fa;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.add-game-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--navy);
+  color: var(--cream);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+}
+.add-game-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* Match Participants & Individual Scores */
+.match-participants-section {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.participants-score-list {
+  display: grid;
+  gap: 8px;
+}
+.participant-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f8f8fc;
+  border: 1px solid #e2e2ec;
+}
+.participant-badge-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.participant-idx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e4e4f0;
+  font-size: 11px;
+  font-weight: 800;
+  color: #444564;
+  flex-shrink: 0;
+}
+.participant-name {
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.participant-score-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.participant-score-input {
+  width: 72px !important;
+  padding: 6px 8px !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  text-align: center;
+}
+.remove-participant-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #f2bac2;
+  background: #fff0f2;
+  color: #a92335;
+  cursor: pointer;
+  transition: all .15s;
+}
+.remove-participant-btn:hover {
+  background: #a92335;
+  color: #fff;
+}
+.add-participant-to-match {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.add-participant-select {
+  flex: 1;
+  font-size: 13px !important;
+  padding: 8px 10px !important;
+}
+.match-dialog-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+/* Add Game Dialog */
+.add-match-dialog {
+  max-width: 480px;
+}
+.add-match-participants-picker {
+  display: grid;
+  gap: 8px;
+}
+.participants-checkbox-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+  background: #fafafc;
+}
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.checkbox-item:hover {
+  background: #eef;
+}
+.checkbox-item input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px !important;
+  cursor: pointer;
 }
 
