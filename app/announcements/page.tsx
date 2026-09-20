@@ -61,7 +61,7 @@ export default async function AnnouncementsPage() {
                 </div>
                 {author && (
                   <footer className="notice-card-footer">
-                    <span>Posted by:</span> <strong>{author}</strong>
+                    <span>Posted by:</span> <strong> SWE 7th Executive Committee</strong>
                   </footer>
                 )}
               </div>
