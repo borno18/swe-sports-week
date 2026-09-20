@@ -6,8 +6,9 @@ import { saveTournament, type ActionResult } from "@/app/admin/tournament-action
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
 import { FlexibleBracketView } from "@/components/flexible-bracket-view";
+import { GameRulesCard } from "@/components/game-rules-card";
 import type { BracketMatch, Tournament, TournamentFormat } from "@/lib/bracket";
-import type { Sport } from "@/lib/data";
+import type { Sport, GameRule } from "@/lib/data";
 
 const initial: ActionResult = { ok: false, message: "" };
 
@@ -103,9 +104,11 @@ export function NewSectionForm({ sports }: { sports: Sport[] }) {
 export function TournamentEditor({
   tournament,
   canEditLineup,
+  rule,
 }: {
   tournament: Tournament;
   canEditLineup: boolean;
+  rule?: GameRule | null;
 }) {
   const [state, action, pending] = useActionState(saveTournament, initial);
   const [result, setResult] = useState<ActionResult>(initial);
@@ -200,6 +203,13 @@ export function TournamentEditor({
           Refresh saved data
         </button>
       )}
+
+      {/* Official Rules & Match Format Editor */}
+      <GameRulesCard
+        sportSlug={tournament.sportSlug}
+        initialRule={rule}
+        editable={canEditLineup}
+      />
 
       {canEditLineup && (
         <details className="lineup-panel" open={!published} key={`lineup-${published}`}>

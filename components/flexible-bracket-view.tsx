@@ -106,7 +106,7 @@ export function FlexibleBracketView({
 
   return (
     <section
-      className="flex-bracket dark-theme"
+      className="flex-bracket"
       style={{ "--sport-color": sportColor } as React.CSSProperties}
     >
       {/* Champion Banner */}

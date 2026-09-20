@@ -6,10 +6,16 @@ import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
 import { FlexibleBracketView } from "@/components/flexible-bracket-view";
 import { GameRulesCard } from "@/components/game-rules-card";
+import { ensureDatabaseInitialized } from "@/lib/db";
+import { getSportRule } from "@/lib/rules-store";
 
 export default async function SportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const { sports, tournaments } = await getTournamentData();
+  const db = await ensureDatabaseInitialized();
+  const [{ sports, tournaments }, rule] = await Promise.all([
+    getTournamentData(),
+    getSportRule(db, slug),
+  ]);
   const sport = sports.find(item => item.slug === slug);
   if (!sport) notFound();
   const sections = tournaments.filter(t => t.sportSlug === slug);
@@ -32,7 +38,7 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
       </header>
       <div className="public-brackets">
         {/* Official Rules & Match Format */}
-        <GameRulesCard sportSlug={slug} />
+        <GameRulesCard sportSlug={slug} initialRule={rule} />
 
         <div className="section-heading">
           <div>

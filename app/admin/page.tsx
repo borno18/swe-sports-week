@@ -9,6 +9,8 @@ import { SportManager } from "@/components/sport-manager";
 import { getTournamentData } from "@/lib/tournaments";
 import { getAnnouncements } from "@/lib/announcements";
 import { championOf } from "@/lib/bracket";
+import { ensureDatabaseInitialized } from "@/lib/db";
+import { getSportRule } from "@/lib/rules-store";
 
 type AdminPageProps = {
   searchParams: Promise<{ error?: string; section?: string; tab?: string }>;
@@ -54,6 +56,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const selected = tournaments.find(t => t.id === params.section) ?? tournaments[0];
   const published = tournaments.filter(t => t.bracket.rounds.length);
   const canEditLineup = user.role !== "RESULT_MANAGER";
+
+  const db = await ensureDatabaseInitialized();
+  const rule = selected ? await getSportRule(db, selected.sportSlug) : null;
 
   const activeTab =
     params.tab === "announcements"
@@ -158,7 +163,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             {canEditLineup && <NewSectionForm sports={sports} />}
           </aside>
           {selected ? (
-            <TournamentEditor key={selected.id} tournament={selected} canEditLineup={canEditLineup} />
+            <TournamentEditor key={selected.id} tournament={selected} canEditLineup={canEditLineup} rule={rule} />
           ) : (
             <div className="empty-state">
               <h3>No sections created yet</h3>

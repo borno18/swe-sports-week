@@ -106,6 +106,16 @@ export async function ensureDatabaseInitialized(): Promise<Client> {
           color TEXT NOT NULL,
           detail TEXT NOT NULL DEFAULT '',
           created_at INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS sport_rules (
+          sport_slug TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          format TEXT NOT NULL DEFAULT 'knockout',
+          advancement TEXT NOT NULL,
+          rules_text TEXT NOT NULL,
+          rounds TEXT,
+          tiebreaker TEXT,
+          updated_at INTEGER NOT NULL
         )`
       ], "write");
     })().catch(error => {
