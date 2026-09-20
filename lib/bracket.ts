@@ -21,6 +21,9 @@ export type BracketMatch = {
   date2?: string;
   time2?: string;
   venue2?: string;
+  // Flexible (mass-elimination) format fields
+  participants?: string[];  // all entry IDs in this match (2–48)
+  advancers?: string[];     // entry IDs that advance to next round
 };
 
 export type TournamentFormat = "knockout" | "round_robin" | "flexible";
@@ -114,48 +117,126 @@ export function createBracket(text: string, legs: number = 1): Bracket {
   return propagate({ entries, rounds, format: "knockout", legs: matchLegs });
 }
 
-export function createFlexibleBracket(text: string, legs: number = 1): Bracket {
+export function createFlexibleBracket(text: string): Bracket {
   const names = parseNames(text, 50);
   const entries = names.map((name, index) => ({ id: `p${index + 1}`, name }));
-  const n = entries.length;
-  const totalRounds = Math.ceil(Math.log2(n));
-  const fullSize = 2 ** totalRounds; // nearest power-of-2 >= n
-  const matchLegs = legs === 2 ? 2 : 1;
+  // Start with one empty round — admin builds matches manually
+  return { entries, rounds: [[]], format: "flexible", legs: 1 };
+}
 
-  // Build all rounds with the right match counts
-  const rounds: BracketMatch[][] = Array.from({ length: totalRounds }, (_, round) =>
-    Array.from({ length: fullSize / 2 ** (round + 1) }, (_, position) => ({
-      id: `r${round + 1}m${position + 1}`,
-      round,
-      position,
-      a: null,
-      b: null,
-      winner: null,
-      bye: false,
-      date: "",
-      time: "",
-      venue: "",
-      scoreA: "",
-      scoreB: "",
-      completedAt: null,
-      legs: matchLegs,
-      scoreA2: matchLegs === 2 ? "" : undefined,
-      scoreB2: matchLegs === 2 ? "" : undefined,
-      date2: matchLegs === 2 ? "" : undefined,
-      time2: matchLegs === 2 ? "" : undefined,
-      venue2: matchLegs === 2 ? "" : undefined,
-    })));
+// ── Flexible format helpers ──
 
-  // Seed round 1: pair entries top-to-bottom, extras beyond fullSize/2 get matches, rest get byes
-  let entry = 0;
-  const contested = n - fullSize / 2; // how many "extra" players need preliminary matches
-  rounds[0].forEach((match, index) => {
-    match.a = entries[entry++].id;
-    match.b = index < contested ? entries[entry++].id : null;
-    if (!match.b) { match.bye = true; match.winner = match.a; }
+/** Available player pool for a given round in a flexible bracket */
+export function flexAvailablePool(bracket: Bracket, roundIndex: number): string[] {
+  if (roundIndex === 0) return bracket.entries.map(e => e.id);
+  const prevRound = bracket.rounds[roundIndex - 1];
+  if (!prevRound) return [];
+  return prevRound.flatMap(m => m.advancers ?? []);
+}
+
+/** IDs already assigned to a match in the given round */
+function flexAssignedInRound(bracket: Bracket, roundIndex: number, excludeMatchId?: string): Set<string> {
+  const round = bracket.rounds[roundIndex] ?? [];
+  const assigned = new Set<string>();
+  for (const m of round) {
+    if (m.id === excludeMatchId) continue;
+    for (const p of m.participants ?? []) assigned.add(p);
+  }
+  return assigned;
+}
+
+export function flexAddMatch(source: Bracket, roundIndex: number, participantIds: string[]): Bracket {
+  if (source.format !== "flexible") throw new Error("Not a flexible bracket.");
+  if (participantIds.length < 2 || participantIds.length > 48) throw new Error("A match needs 2–48 participants.");
+  const bracket = structuredClone(source);
+  // Ensure the round exists
+  while (bracket.rounds.length <= roundIndex) bracket.rounds.push([]);
+  const round = bracket.rounds[roundIndex];
+  // Verify participants are available
+  const pool = new Set(flexAvailablePool(bracket, roundIndex));
+  const assigned = flexAssignedInRound(bracket, roundIndex);
+  for (const id of participantIds) {
+    if (!pool.has(id)) throw new Error("One or more participants are not in the available pool for this round.");
+    if (assigned.has(id)) throw new Error("One or more participants are already in another match this round.");
+  }
+  const position = round.length;
+  round.push({
+    id: `r${roundIndex + 1}m${position + 1}`,
+    round: roundIndex,
+    position,
+    a: null, b: null, winner: null, bye: false,
+    date: "", time: "", venue: "",
+    scoreA: "", scoreB: "",
+    completedAt: null,
+    participants: [...participantIds],
+    advancers: [],
   });
+  return bracket;
+}
 
-  return propagate({ entries, rounds, format: "flexible", legs: matchLegs });
+export function flexRemoveMatch(source: Bracket, matchId: string): Bracket {
+  if (source.format !== "flexible") throw new Error("Not a flexible bracket.");
+  const bracket = structuredClone(source);
+  for (const round of bracket.rounds) {
+    const idx = round.findIndex(m => m.id === matchId);
+    if (idx !== -1) {
+      round.splice(idx, 1);
+      // Re-index positions
+      round.forEach((m, i) => { m.position = i; });
+      return bracket;
+    }
+  }
+  throw new Error("Match not found.");
+}
+
+export function flexSetAdvancers(source: Bracket, matchId: string, advancerIds: string[], now = Date.now()): Bracket {
+  if (source.format !== "flexible") throw new Error("Not a flexible bracket.");
+  const bracket = structuredClone(source);
+  const match = bracket.rounds.flat().find(m => m.id === matchId);
+  if (!match) throw new Error("Match not found.");
+  const participants = new Set(match.participants ?? []);
+  for (const id of advancerIds) {
+    if (!participants.has(id)) throw new Error("Advancer is not a participant of this match.");
+  }
+  match.advancers = [...advancerIds];
+  match.completedAt = advancerIds.length > 0 ? now : null;
+  return bracket;
+}
+
+export function flexAddRound(source: Bracket): Bracket {
+  if (source.format !== "flexible") throw new Error("Not a flexible bracket.");
+  const bracket = structuredClone(source);
+  const lastRound = bracket.rounds.at(-1);
+  if (!lastRound || lastRound.length === 0) throw new Error("Current round has no matches.");
+  // Check all matches have advancers
+  for (const m of lastRound) {
+    if (!m.advancers || m.advancers.length === 0) {
+      throw new Error("All matches in the current round must have advancers before starting the next round.");
+    }
+  }
+  bracket.rounds.push([]);
+  return bracket;
+}
+
+export function flexUpdateParticipants(source: Bracket, matchId: string, participantIds: string[]): Bracket {
+  if (source.format !== "flexible") throw new Error("Not a flexible bracket.");
+  if (participantIds.length < 2 || participantIds.length > 48) throw new Error("A match needs 2–48 participants.");
+  const bracket = structuredClone(source);
+  const match = bracket.rounds.flat().find(m => m.id === matchId);
+  if (!match) throw new Error("Match not found.");
+  // Find which round this match is in
+  const roundIndex = match.round;
+  const pool = new Set(flexAvailablePool(bracket, roundIndex));
+  const assigned = flexAssignedInRound(bracket, roundIndex, matchId);
+  for (const id of participantIds) {
+    if (!pool.has(id)) throw new Error("One or more participants are not in the available pool for this round.");
+    if (assigned.has(id)) throw new Error("One or more participants are already in another match this round.");
+  }
+  match.participants = [...participantIds];
+  // Clear advancers if participants changed (keep only valid ones)
+  match.advancers = (match.advancers ?? []).filter(a => participantIds.includes(a));
+  if (match.advancers.length === 0) match.completedAt = null;
+  return bracket;
 }
 
 export function createRoundRobin(text: string, legs: number = 1): Bracket {
@@ -218,8 +299,7 @@ export function createRoundRobin(text: string, legs: number = 1): Bracket {
 }
 
 function propagate(bracket: Bracket) {
-  if (bracket.format === "round_robin") return bracket;
-  // Both knockout and flexible use the same tree-based propagation
+  if (bracket.format === "round_robin" || bracket.format === "flexible") return bracket;
   for (let round = 1; round < bracket.rounds.length; round++) {
     for (const match of bracket.rounds[round]) {
       const a = bracket.rounds[round - 1][match.position * 2].winner;
@@ -237,13 +317,13 @@ function propagate(bracket: Bracket) {
 }
 
 export function chooseWinner(source: Bracket, matchId: string, entryId: string | null, now = Date.now()) {
+  if (source.format === "flexible") throw new Error("Use flexSetAdvancers for flexible brackets.");
   const bracket = structuredClone(source);
   const match = bracket.rounds.flat().find(item => item.id === matchId);
   if (!match) throw new Error("This match no longer exists. Refresh and try again.");
   if (match.bye) throw new Error("Byes advance automatically.");
 
   if (bracket.format === "round_robin") {
-    // flexible and knockout share the same final-match champion logic
     if (entryId !== null && (!match.a || !match.b || ![match.a, match.b, "draw"].includes(entryId))) {
       throw new Error("Choose team A, team B, or Draw as the result.");
     }
@@ -353,7 +433,27 @@ export function championOf(bracket: Bracket) {
     return null;
   }
 
-  // knockout and flexible: champion is the winner of the final match
+  if (bracket.format === "flexible") {
+    // Champion = sole advancer from the last completed round
+    const lastRound = bracket.rounds.at(-1);
+    if (!lastRound || lastRound.length === 0) return null;
+    const allAdvancers = lastRound.flatMap(m => m.advancers ?? []);
+    const allComplete = lastRound.every(m => m.completedAt);
+    if (allComplete && allAdvancers.length === 1) {
+      const winnerId = allAdvancers[0];
+      // Find runner-up: last eliminated players from the final round
+      const finalParticipants = lastRound.flatMap(m => m.participants ?? []);
+      const eliminated = finalParticipants.filter(id => id !== winnerId);
+      const runnerUpId = eliminated[0] ?? winnerId;
+      return {
+        winner: bracket.entries.find(e => e.id === winnerId)!,
+        runnerUp: bracket.entries.find(e => e.id === runnerUpId)!,
+      };
+    }
+    return null;
+  }
+
+  // knockout: champion is the winner of the final match
   const final = bracket.rounds.at(-1)?.[0];
   if (!final?.winner) return null;
   return {

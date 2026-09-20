@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getTournamentData } from "@/lib/tournaments";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
+import { FlexibleBracketView } from "@/components/flexible-bracket-view";
 
 export default async function SportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -54,6 +55,8 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
             </p>
             {t.bracket.format === "round_robin" ? (
               <RoundRobinView tournament={t} />
+            ) : t.bracket.format === "flexible" ? (
+              <FlexibleBracketView tournament={t} />
             ) : (
               <TournamentBracket tournament={t} />
             )}

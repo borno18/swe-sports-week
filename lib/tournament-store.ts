@@ -5,6 +5,11 @@ import {
   createBracket,
   createFlexibleBracket,
   createRoundRobin,
+  flexAddMatch,
+  flexAddRound,
+  flexRemoveMatch,
+  flexSetAdvancers,
+  flexUpdateParticipants,
   renameEntries,
   type Tournament,
   type Bracket,
@@ -42,7 +47,12 @@ export type Mutation =
       venue2?: string;
       scoreA2?: string;
       scoreB2?: string;
-    };
+    }
+  | { kind: "flex_add_match"; round: number; participantIds: string[] }
+  | { kind: "flex_remove_match"; matchId: string }
+  | { kind: "flex_set_advancers"; matchId: string; advancerIds: string[] }
+  | { kind: "flex_update_participants"; matchId: string; participantIds: string[] }
+  | { kind: "flex_add_round" };
 
 export async function initializeTournaments(db: Pick<Client, "execute" | "batch">, catalog: { slug: string; name: string }[]) {
   const existing = await db.execute("SELECT id, sport_slug, title FROM tournaments");
@@ -171,7 +181,7 @@ export async function mutateTournament(
         if (chosenFormat === "round_robin") {
           bracket = createRoundRobin(mutation.names, chosenLegs);
         } else if (chosenFormat === "flexible") {
-          bracket = createFlexibleBracket(mutation.names, chosenLegs);
+          bracket = createFlexibleBracket(mutation.names);
         } else {
           bracket = createBracket(mutation.names, chosenLegs);
         }
@@ -236,6 +246,21 @@ export async function mutateTournament(
         });
         break;
       }
+      case "flex_add_match":
+        bracket = flexAddMatch(bracket, mutation.round, mutation.participantIds);
+        break;
+      case "flex_remove_match":
+        bracket = flexRemoveMatch(bracket, mutation.matchId);
+        break;
+      case "flex_set_advancers":
+        bracket = flexSetAdvancers(bracket, mutation.matchId, mutation.advancerIds);
+        break;
+      case "flex_update_participants":
+        bracket = flexUpdateParticipants(bracket, mutation.matchId, mutation.participantIds);
+        break;
+      case "flex_add_round":
+        bracket = flexAddRound(bracket);
+        break;
     }
 
     await tx.execute({

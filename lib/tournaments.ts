@@ -54,6 +54,36 @@ export const getTournamentData = cache(async () => {
     for (const match of tournament.bracket.rounds.flat()) {
       if (match.bye) continue;
 
+      // Flexible format: multi-player matches
+      if (format === "flexible") {
+        const participants = match.participants ?? [];
+        const advancers = match.advancers ?? [];
+        if (participants.length === 0) continue;
+        const participantNames = participants.map(id => names.get(id) ?? "Unknown").join(", ");
+        const advancerCount = advancers.length;
+        matches.push({
+          id: `${tournament.id}-${match.id}`,
+          sport: sport.name,
+          sportSlug: sport.slug,
+          tournamentId: tournament.id,
+          icon: sport.icon,
+          category: tournament.title,
+          round: roundName(match.round, tournament.bracket.rounds.length, format),
+          participantA: `${participants.length} players`,
+          participantB: participantNames,
+          scoreA: "",
+          scoreB: "",
+          status: match.completedAt ? "completed" : "upcoming",
+          date: match.date,
+          time: match.time || "Time TBD",
+          venue: match.venue || "Venue TBD",
+          day: eventDays.findIndex(day => day.date === match.date) + 1,
+          completedAt: match.completedAt,
+          winner: advancerCount > 0 ? `${advancerCount} advanced` : undefined,
+        });
+        continue;
+      }
+
       let scoreDisplayA = match.scoreA;
       let scoreDisplayB = match.scoreB;
       if (match.legs === 2 && (match.scoreA2 || match.scoreB2)) {

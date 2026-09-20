@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { saveTournament, type ActionResult } from "@/app/admin/tournament-actions";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
+import { FlexibleBracketView } from "@/components/flexible-bracket-view";
 import type { BracketMatch, Tournament, TournamentFormat } from "@/lib/bracket";
 import type { Sport } from "@/lib/data";
 
@@ -280,6 +281,11 @@ export function TournamentEditor({
               onWinner={record}
               onDetails={setDetails}
               busy={busy}
+            />
+          ) : tournament.bracket.format === "flexible" ? (
+            <FlexibleBracketView
+              tournament={tournament}
+              editable={true}
             />
           ) : (
             <TournamentBracket

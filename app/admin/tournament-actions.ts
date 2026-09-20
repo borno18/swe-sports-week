@@ -15,7 +15,7 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
   if (!admin) return { ok: false, message: "Your session expired. Sign in again to save changes." };
   const kind = field(form, "kind");
 
-  if (admin.role === "RESULT_MANAGER" && !["winner", "details"].includes(kind)) {
+  if (admin.role === "RESULT_MANAGER" && !["winner", "details", "flex_set_advancers", "flex_add_round"].includes(kind)) {
     return { ok: false, message: "Only tournament organizers can edit lineups, formats, or delete sections." };
   }
 
@@ -84,6 +84,27 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
           scoreA2: field(form, "scoreA2") !== "" ? field(form, "scoreA2") : undefined,
           scoreB2: field(form, "scoreB2") !== "" ? field(form, "scoreB2") : undefined,
         };
+        break;
+      case "flex_add_match": {
+        const participantIds = field(form, "participantIds").split(",").filter(Boolean);
+        mutation = { kind, round: Number(field(form, "round")), participantIds };
+        break;
+      }
+      case "flex_remove_match":
+        mutation = { kind, matchId: field(form, "matchId") };
+        break;
+      case "flex_set_advancers": {
+        const advancerIds = field(form, "advancerIds").split(",").filter(Boolean);
+        mutation = { kind, matchId: field(form, "matchId"), advancerIds };
+        break;
+      }
+      case "flex_update_participants": {
+        const pIds = field(form, "participantIds").split(",").filter(Boolean);
+        mutation = { kind, matchId: field(form, "matchId"), participantIds: pIds };
+        break;
+      }
+      case "flex_add_round":
+        mutation = { kind };
         break;
       default:
         return { ok: false, message: "Unknown action." };
