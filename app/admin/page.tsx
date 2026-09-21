@@ -155,7 +155,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 >
                   <strong>{t.title}</strong>
                   <small>
-                    {t.bracket.format === "round_robin" ? "Group Stage" : "Knockout"} · {t.bracket.entries.length} entries
+                    {t.bracket.hasGroupStage ? "Groups + Knockout" : t.bracket.format === "round_robin" ? "League" : "Knockout"} · {t.bracket.entries.length} entries
                   </small>
                 </Link>
               ))}

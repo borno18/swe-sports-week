@@ -5,7 +5,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { tournamentDatabase } from "@/lib/tournaments";
 import { addTournament, deleteTournament, mutateTournament, type Mutation } from "@/lib/tournament-store";
 import { addSport, deleteSport, listSports } from "@/lib/sports-store";
-import type { TournamentFormat } from "@/lib/bracket";
+import type { TournamentFormat, RoundConfig, GroupStageConfig } from "@/lib/bracket";
 
 export type ActionResult = { ok: boolean; message: string; id?: string };
 const field = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
@@ -15,7 +15,7 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
   if (!admin) return { ok: false, message: "Your session expired. Sign in again to save changes." };
   const kind = field(form, "kind");
 
-  if (admin.role === "RESULT_MANAGER" && !["winner", "details", "add_match", "delete_match", "add_participant", "remove_participant", "flex_set_advancers", "flex_add_round"].includes(kind)) {
+  if (admin.role === "RESULT_MANAGER" && !["winner", "details", "qualifiers", "flex_set_advancers"].includes(kind)) {
     return { ok: false, message: "Only tournament organizers can edit lineups, formats, or delete sections." };
   }
 
@@ -58,7 +58,12 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
         const legs = field(form, "legs") ? Number(field(form, "legs")) : undefined;
         const playersPerGame = field(form, "playersPerGame") ? Number(field(form, "playersPerGame")) : undefined;
         const totalGames = field(form, "totalGames") ? Number(field(form, "totalGames")) : undefined;
-        mutation = { kind, names: field(form, "names"), format, legs, playersPerGame, totalGames };
+        const roundConfigRaw = field(form, "roundConfig");
+        const roundConfig: RoundConfig[] | undefined = roundConfigRaw ? JSON.parse(roundConfigRaw) : undefined;
+        const hasGroupStage = field(form, "hasGroupStage") === "true";
+        const groupStageConfigRaw = field(form, "groupStageConfig");
+        const groupStageConfig: GroupStageConfig | undefined = groupStageConfigRaw ? JSON.parse(groupStageConfigRaw) : undefined;
+        mutation = { kind, names: field(form, "names"), format, legs, playersPerGame, totalGames, roundConfig, hasGroupStage, groupStageConfig };
         break;
       }
       case "rename":
@@ -73,10 +78,13 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
       case "winner":
         mutation = { kind, matchId: field(form, "matchId"), entryId: field(form, "entryId") || null };
         break;
+      case "qualifiers":
+        mutation = { kind, groupId: field(form, "groupId"), entryIds: form.getAll("qualifierId").map(String) };
+        break;
       case "details": {
         const scores: Record<string, string> = {};
         for (const [k, v] of form.entries()) {
-          if (k.startsWith("score_") && typeof v === "string" && v.trim() !== "") {
+          if (k.startsWith("score_") && typeof v === "string") {
             scores[k.replace("score_", "")] = v.trim();
           }
         }

@@ -25,6 +25,8 @@ export type BracketMatch = {
   participants?: string[];  // all entry IDs in this match (2–48)
   advancers?: string[];     // entry IDs that advance to next round
   scores?: Record<string, string>; // entry ID -> score string
+  sourceSlots?: (string | null)[]; // fixed incoming slots; null means a result is pending
+  groupId?: string;
 };
 
 export type TournamentFormat = "knockout" | "round_robin" | "flexible";
@@ -35,6 +37,19 @@ export type BracketOptions = {
   totalGames?: number;     // custom total number of games
 };
 
+export type RoundConfig = {
+  name: string;             // e.g. "Quarter-finals", "Semi-finals"
+  matchCount: number;       // number of matches in this round
+  playersPerMatch: number;  // players per match in this round (default 2)
+  playerCount?: number; // total entrants in this round, including any byes
+};
+
+export type GroupStageConfig = {
+  groupCount: number;       // number of groups/pools
+  playersPerGroup: number;  // players per group
+  advancePerGroup: number;  // how many advance from each group
+};
+
 export type Bracket = {
   entries: Entry[];
   rounds: BracketMatch[][];
@@ -42,6 +57,11 @@ export type Bracket = {
   legs?: number;
   playersPerGame?: number;
   totalGames?: number;
+  roundConfig?: RoundConfig[];          // custom round configuration
+  hasGroupStage?: boolean;              // whether group stage is enabled
+  groupStageConfig?: GroupStageConfig;  // group stage details
+  groupStageRounds?: BracketMatch[][];  // group stage match rounds
+  groupQualifiers?: Record<string, string[]>;
 };
 
 /** Returns all participant IDs in a match, falling back to [a, b] */
@@ -77,7 +97,11 @@ export type StandingRow = {
   points: number;
 };
 
-export function roundName(index: number, count: number, format: TournamentFormat = "knockout") {
+export function roundName(index: number, count: number, format: TournamentFormat = "knockout", roundConfig?: RoundConfig[]) {
+  // Use custom round name if configured
+  if (roundConfig && roundConfig[index]?.name) {
+    return roundConfig[index].name;
+  }
   if (format === "round_robin") {
     return `Round ${index + 1}`;
   }
@@ -104,18 +128,16 @@ function propagateMulti(bracket: Bracket): Bracket {
   for (let r = 1; r < bracket.rounds.length; r++) {
     const prevMatches = bracket.rounds[r - 1];
     for (const match of bracket.rounds[r]) {
-      const incomingWinners: string[] = [];
+      const incomingSlots: (string | null)[] = [];
       for (let k = 0; k < pPerGame; k++) {
         const prevM = prevMatches[match.position * pPerGame + k];
-        if (prevM?.winner) incomingWinners.push(prevM.winner);
+        if (prevM) incomingSlots.push(prevM.winner ?? null);
       }
-      match.participants = incomingWinners;
-      match.a = incomingWinners[0] ?? null;
-      match.b = incomingWinners[1] ?? null;
-      if (match.winner && !incomingWinners.includes(match.winner)) {
-        match.winner = null;
-        match.completedAt = null;
-      }
+      if (JSON.stringify(match.sourceSlots ?? getMatchParticipants(match)) !== JSON.stringify(incomingSlots)) clearMatchResult(match);
+      match.sourceSlots = incomingSlots;
+      match.participants = incomingSlots.filter((id): id is string => id !== null);
+      match.a = incomingSlots[0] ?? null;
+      match.b = incomingSlots[1] ?? null;
     }
   }
   return bracket;
@@ -594,13 +616,16 @@ export function createRoundRobin(text: string, options: number | BracketOptions 
 
 function propagate(bracket: Bracket) {
   if (bracket.format === "round_robin" || bracket.format === "flexible") return bracket;
+
+  if (bracket.roundConfig?.length) return propagateConfigured(bracket);
+
   if ((bracket.playersPerGame || 2) > 2) return propagateMulti(bracket);
   for (let round = 1; round < bracket.rounds.length; round++) {
     for (const match of bracket.rounds[round]) {
       const a = bracket.rounds[round - 1][match.position * 2]?.winner ?? null;
       const b = bracket.rounds[round - 1][match.position * 2 + 1]?.winner ?? null;
       if (match.a !== a || match.b !== b) {
-        match.winner = null; match.completedAt = null; match.scoreA = ""; match.scoreB = "";
+        clearMatchResult(match);
         if (match.legs === 2) {
           match.scoreA2 = ""; match.scoreB2 = "";
         }
@@ -613,25 +638,30 @@ function propagate(bracket: Bracket) {
 }
 
 export function chooseWinner(source: Bracket, matchId: string, entryId: string | null, now = Date.now()) {
-  if (source.format === "flexible") throw new Error("Use flexSetAdvancers for flexible brackets.");
+  if (source.format === "flexible") return flexSetAdvancers(source, matchId, entryId ? [entryId] : [], now);
   const bracket = structuredClone(source);
-  const match = bracket.rounds.flat().find(item => item.id === matchId);
+  const allMatches = [...bracket.rounds.flat(), ...(bracket.groupStageRounds ? bracket.groupStageRounds.flat() : [])];
+  const match = allMatches.find(item => item.id === matchId);
   if (!match) throw new Error("This match no longer exists. Refresh and try again.");
   if (match.bye) throw new Error("Byes advance automatically.");
+  if (entryId && !isMatchReady(match)) throw new Error("Both opponents (all participants) must qualify before choosing a winner.");
 
   const participants = getMatchParticipants(match);
 
-  if (bracket.format === "round_robin") {
+  const isGroupMatch = Boolean(bracket.groupStageRounds?.flat().some(m => m.id === matchId));
+
+  if (bracket.format === "round_robin" || isGroupMatch) {
     if (entryId !== null && !participants.includes(entryId) && entryId !== "draw") {
       throw new Error("Choose a participant or Draw as the result.");
     }
     match.winner = entryId;
     match.completedAt = entryId ? now : null;
-    return bracket;
+    if (!entryId) clearMatchResult(match);
+    return isGroupMatch ? refreshGroupQualification(bracket, match) : bracket;
   }
 
   if (entryId !== null) {
-    if (participants.length > 0) {
+    if ((bracket.playersPerGame && bracket.playersPerGame > 2) || (match.participants && match.participants.length > 2)) {
       if (!participants.includes(entryId)) {
         throw new Error("Choose a valid participant as the winner.");
       }
@@ -644,14 +674,13 @@ export function chooseWinner(source: Bracket, matchId: string, entryId: string |
   match.winner = entryId;
   match.completedAt = entryId ? now : null;
   if (!entryId) {
-    match.scoreA = ""; match.scoreB = "";
-    if (match.legs === 2) { match.scoreA2 = ""; match.scoreB2 = ""; }
+    clearMatchResult(match);
   }
   return propagate(bracket);
 }
 
 export function renameEntries(source: Bracket, text: string) {
-  const names = parseNames(text);
+  const names = parseNames(text, source.roundConfig ? 200 : 64);
   if (names.length !== source.entries.length) throw new Error("Keep the same number of names when renaming. Reset the bracket to change the lineup.");
   const bracket = structuredClone(source);
   bracket.entries.forEach((entry, index) => { entry.name = names[index]; });
@@ -704,11 +733,11 @@ export function calculateStandings(bracket: Bracket): StandingRow[] {
         b.drawn += 1;
         a.points += 1;
         b.points += 1;
-      } else if (match.winner === a.id || (hasScores && sA > sB)) {
+      } else if (match.winner === a.id || (!match.winner && hasScores && sA > sB)) {
         a.won += 1;
         b.lost += 1;
         a.points += 3;
-      } else if (match.winner === b.id || (hasScores && sB > sA)) {
+      } else if (match.winner === b.id || (!match.winner && hasScores && sB > sA)) {
         b.won += 1;
         a.lost += 1;
         b.points += 3;
@@ -766,4 +795,168 @@ export function championOf(bracket: Bracket) {
   const otherId = participants.find(id => id !== final.winner) ?? (final.winner === final.a ? final.b : final.a);
   const runnerUp = bracket.entries.find(entry => entry.id === otherId) ?? winner;
   return { winner, runnerUp };
+}
+
+/** Generate a sensible default name for a round given index and total count */
+export function defaultRoundName(index: number, totalRounds: number): string {
+  if (totalRounds === 1) return "Final";
+  if (index === totalRounds - 1) return "Final";
+  if (index === totalRounds - 2) return "Semi-finals";
+  if (index === totalRounds - 3 && totalRounds >= 3) return "Quarter-finals";
+  if (index === totalRounds - 4 && totalRounds >= 4) return "Round of 16";
+  return `Round ${index + 1}`;
+}
+
+/**
+ * Create a bracket from explicit round configuration.
+ * Each round specifies: name, number of matches, players per match.
+ * Optional group stage generates round-robin pools.
+ */
+export function validateRoundConfiguration(configs: RoundConfig[], entrants: number, hasGroups = false, groups?: GroupStageConfig) {
+  const integer = (value: number, min: number, max: number) => Number.isSafeInteger(value) && value >= min && value <= max;
+  if (!Array.isArray(configs) || configs.length < 1 || configs.length > 10) throw new Error("Configure between 1 and 10 knockout rounds.");
+  let incoming = entrants;
+  if (hasGroups) {
+    if (!groups || !integer(groups.groupCount, 1, 16) || !integer(groups.playersPerGroup, 2, 20) || !integer(groups.advancePerGroup, 1, groups.playersPerGroup - 1)) {
+      throw new Error("Choose 1–16 groups, 2–20 players per group, and fewer qualifiers than players per group.");
+    }
+    if (entrants !== groups.groupCount * groups.playersPerGroup) throw new Error(`Enter exactly ${groups.groupCount * groups.playersPerGroup} names for these groups.`);
+    incoming = groups.groupCount * groups.advancePerGroup;
+  }
+  for (const [index, config] of configs.entries()) {
+    if (!config || typeof config.name !== 'string' || !config.name.trim() || config.name.trim().length > 40 || /[\u0000-\u001f]/.test(config.name)) throw new Error(`Give round ${index + 1} a name of 1–40 characters.`);
+    if (!integer(config.matchCount, 1, 100) || !integer(config.playersPerMatch, 2, 48)) throw new Error(`${config.name}: choose 1–100 matches and 2–48 players per match.`);
+    if (config.playerCount !== undefined && (!integer(config.playerCount, 2, 200) || config.playerCount !== incoming)) throw new Error(`${config.name} must have ${incoming} players: ${index ? 'one winner from each preceding match' : hasGroups ? 'the group qualifiers' : 'all the entered names'}.`);
+    if (incoming > config.matchCount * config.playersPerMatch || incoming < config.matchCount) throw new Error(`${config.name}: ${incoming} players cannot fit into ${config.matchCount} matches of up to ${config.playersPerMatch}. Adjust the match count or players per match.`);
+    if (config.matchCount >= incoming) throw new Error(`${config.name} must eliminate at least one player. Use fewer matches than players.`);
+    incoming = config.matchCount;
+  }
+  if (configs.at(-1)!.matchCount !== 1) throw new Error("The final round must contain one championship match.");
+}
+
+function legsInvalidForMulti(config: RoundConfig) { return config.playersPerMatch > 2; }
+
+function configuredMatch(round: number, position: number, legs: number): BracketMatch {
+  return { id: `r${round + 1}m${position + 1}`, round, position, a: null, b: null, winner: null, bye: false, date: '', time: '', venue: '', scoreA: '', scoreB: '', completedAt: null, legs, participants: [], scores: {}, advancers: [] };
+}
+
+function clearMatchResult(match: BracketMatch) {
+  match.winner = null;
+  match.completedAt = null;
+  match.scoreA = ''; match.scoreB = ''; match.scoreA2 = ''; match.scoreB2 = '';
+  match.scores = {}; match.advancers = [];
+}
+
+function assignConfiguredRound(matches: BracketMatch[], slots: (string | null)[]) {
+  let offset = 0;
+  matches.forEach((match, index) => {
+    const count = Math.floor(slots.length / matches.length) + (index < slots.length % matches.length ? 1 : 0);
+    const incoming = slots.slice(offset, offset + count);
+    offset += count;
+    const previous = match.sourceSlots ?? getMatchParticipants(match);
+    if (JSON.stringify(previous) !== JSON.stringify(incoming)) clearMatchResult(match);
+    match.sourceSlots = incoming;
+    match.participants = incoming.filter((id): id is string => id !== null);
+    match.a = incoming[0] ?? null;
+    match.b = incoming[1] ?? null;
+    match.bye = count === 1 && incoming[0] !== null;
+    if (match.bye) match.winner = incoming[0];
+  });
+}
+
+export function isMatchReady(match: BracketMatch) {
+  return !match.bye && (match.sourceSlots ? match.sourceSlots.length >= 2 && match.sourceSlots.every(Boolean) : getMatchParticipants(match).length >= 2);
+}
+
+export function tournamentGroups(bracket: Bracket) {
+  if (!bracket.hasGroupStage || !bracket.groupStageConfig) return [];
+  const config = bracket.groupStageConfig;
+  return Array.from({ length: config.groupCount }, (_, index) => {
+    const id = `g${index + 1}`;
+    const entries = bracket.entries.slice(index * config.playersPerGroup, (index + 1) * config.playersPerGroup);
+    const rounds = (bracket.groupStageRounds ?? []).map(round => round.filter(m => m.groupId === id || m.id.startsWith(`gs_${id}r`))).filter(round => round.length);
+    const groupBracket: Bracket = { entries, rounds, format: 'round_robin', legs: 1 };
+    const standings = calculateStandings(groupBracket);
+    const complete = rounds.length > 0 && rounds.flat().every(m => Boolean(m.winner));
+    const sameRank = (a: StandingRow, b?: StandingRow) => !!b && a.points === b.points && a.gd === b.gd && a.gf === b.gf;
+    const tied = complete && standings.slice(0, config.advancePerGroup).some((row, i) => sameRank(row, standings[i + 1]));
+    const confirmed = bracket.groupQualifiers?.[id];
+    const qualifiers = complete ? confirmed ?? (tied ? [] : standings.slice(0, config.advancePerGroup).map(row => row.id)) : [];
+    return { id, name: `Group ${String.fromCharCode(65 + index)}`, bracket: groupBracket, standings, complete, tied, qualifiers };
+  });
+}
+
+export function propagateConfigured(bracket: Bracket): Bracket {
+  if (!bracket.roundConfig?.length) return bracket;
+  let slots: (string | null)[] = bracket.entries.map(e => e.id);
+  if (bracket.hasGroupStage && bracket.groupStageConfig) {
+    const groups = tournamentGroups(bracket);
+    slots = [];
+    // Pair neighbouring groups in opposite seed order (A1/B2, B1/A2 for two qualifiers).
+    for (let index = 0; index < groups.length; index += 2) {
+      const left = groups[index];
+      const right = groups[index + 1];
+      for (let rank = 0; rank < bracket.groupStageConfig.advancePerGroup; rank++) {
+        slots.push(left.qualifiers[rank] ?? null);
+        if (right) slots.push(right.qualifiers[bracket.groupStageConfig.advancePerGroup - 1 - rank] ?? null);
+      }
+    }
+  }
+  bracket.rounds.forEach(round => {
+    assignConfiguredRound(round, slots);
+    slots = round.map(m => m.winner);
+  });
+  return bracket;
+}
+
+export function confirmGroupQualifiers(source: Bracket, groupId: string, entryIds: string[]) {
+  const bracket = structuredClone(source);
+  const group = tournamentGroups(bracket).find(g => g.id === groupId);
+  const count = bracket.groupStageConfig?.advancePerGroup;
+  if (!group || !group.complete || !count) throw new Error("Finish every group match before confirming qualifiers.");
+  if (entryIds.length !== count || new Set(entryIds).size !== count) throw new Error(`Choose ${count} different qualifiers in finishing order.`);
+  entryIds.forEach((id, rank) => {
+    const entry = group.standings.find(row => row.id === id);
+    const expected = group.standings[rank];
+    if (!entry || entry.points !== expected.points || entry.gd !== expected.gd || entry.gf !== expected.gf) throw new Error("Keep the standings order; choose between tied players only.");
+  });
+  bracket.groupQualifiers = { ...bracket.groupQualifiers, [groupId]: entryIds };
+  return propagateConfigured(bracket);
+}
+
+export function refreshGroupQualification(bracket: Bracket, match: BracketMatch) {
+  const group = tournamentGroups(bracket).find(g => g.bracket.rounds.flat().some(m => m.id === match.id));
+  if (group && bracket.groupQualifiers) delete bracket.groupQualifiers[group.id];
+  return propagateConfigured(bracket);
+}
+
+export function createConfiguredBracket(text: string, roundConfigs: RoundConfig[], hasGroupStage = false, groupStageConfig?: GroupStageConfig, legs = 1): Bracket {
+  const names = parseNames(text, 200);
+  validateRoundConfiguration(roundConfigs, names.length, hasGroupStage, groupStageConfig);
+  if (legs !== 1 && legs !== 2) throw new Error("Choose one match or two legs per tie.");
+  if (legs === 2 && roundConfigs.some(legsInvalidForMulti)) throw new Error("Two-leg ties require two players per match in every knockout round.");
+  const entries = names.map((name, index) => ({ id: `p${index + 1}`, name }));
+  const groupStageRounds: BracketMatch[][] = [];
+  if (hasGroupStage && groupStageConfig) {
+    for (let group = 0; group < groupStageConfig.groupCount; group++) {
+      const groupEntries = entries.slice(group * groupStageConfig.playersPerGroup, (group + 1) * groupStageConfig.playersPerGroup);
+      const generated = createRoundRobin(groupEntries.map(e => e.name).join('\n'));
+      const ids = new Map(generated.entries.map((entry, index) => [entry.id, groupEntries[index].id]));
+      generated.rounds.forEach((round, roundIndex) => {
+        groupStageRounds[roundIndex] ??= [];
+        for (const match of round) {
+          const a = ids.get(match.a!)!; const b = ids.get(match.b!)!;
+          groupStageRounds[roundIndex].push({ ...match, id: `gs_g${group + 1}${match.id}`, groupId: `g${group + 1}`, a, b, participants: [a, b] });
+        }
+      });
+    }
+  }
+  const bracket: Bracket = {
+    entries, rounds: roundConfigs.map((r, index) => Array.from({ length: r.matchCount }, (_, position) => configuredMatch(index, position, legs))),
+    format: 'knockout', legs, playersPerGame: roundConfigs[0].playersPerMatch,
+    roundConfig: roundConfigs.map(r => ({ ...r, name: r.name.trim() })), hasGroupStage,
+    groupStageConfig: hasGroupStage ? groupStageConfig : undefined,
+    groupStageRounds: hasGroupStage ? groupStageRounds : undefined,
+  };
+  return propagateConfigured(bracket);
 }

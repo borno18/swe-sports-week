@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, Trophy, Crown, Maximize2, Minimize2, Code2, Check } from "lucide-react";
-import { championOf, roundName, type BracketMatch, type Tournament } from "@/lib/bracket";
+import { championOf, isMatchReady, roundName, type BracketMatch, type Tournament } from "@/lib/bracket";
 import { sports as catalog } from "@/lib/data";
 
 export function TournamentBracket({
@@ -50,7 +50,7 @@ export function TournamentBracket({
 
   function handleShare() {
     if (typeof window !== "undefined") {
-      const url = `${window.location.origin}${window.location.pathname}#section-${tournament.id}`;
+      const url = `${window.location.origin}/sports/${tournament.sportSlug}#section-${tournament.id}`;
       navigator.clipboard?.writeText(url);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
@@ -137,7 +137,7 @@ export function TournamentBracket({
             >
               {bracket.rounds.map((_, index) => (
                 <option key={index} value={index}>
-                  {roundName(index, bracket.rounds.length, bracket.format || "knockout")}
+                  {roundName(index, bracket.rounds.length, bracket.format || "knockout", bracket.roundConfig)}
                 </option>
               ))}
             </select>
@@ -211,25 +211,25 @@ export function TournamentBracket({
             >
               <div className="ko-round-header">
                 <span className="ko-round-label">
-                  {roundName(roundIndex, bracket.rounds.length, bracket.format || "knockout")}
+                  {roundName(roundIndex, bracket.rounds.length, bracket.format || "knockout", bracket.roundConfig)}
                 </span>
               </div>
 
               <div className="ko-matches">
                 {round.map((match) => {
-                  const is2Leg = match.legs === 2 || bracket.legs === 2;
+                  const is2Leg = (match.legs ?? bracket.legs) === 2;
                   const isFinal = isFinalRound(roundIndex);
                   const isSelected = selectedMatchId === match.id;
 
                   return (
                     <div
-                      className={`ko-slot${roundIndex < bracket.rounds.length - 1 ? " has-line" : ""}${isSelected ? " active-line" : ""}`}
+                      className={`ko-slot${round.length === (bracket.rounds[roundIndex + 1]?.length ?? 0) * 2 ? " has-line" : ""}${isSelected ? " active-line" : ""}`}
                       key={match.id}
                     >
                       <div
                         id={`bracket-${tournament.id}-${match.id}`}
                         className={`ko-match${match.winner ? " decided" : ""}${match.bye ? " bye" : ""}${isSelected ? " is-selected" : ""}${isFinal ? " is-final-match" : ""}`}
-                        aria-label={`${roundName(roundIndex, bracket.rounds.length, bracket.format || "knockout")}, match ${match.position + 1}`}
+                        aria-label={`${roundName(roundIndex, bracket.rounds.length, bracket.format || "knockout", bracket.roundConfig)}, match ${match.position + 1}`}
                         onClick={() => setSelectedMatchId(selectedMatchId === match.id ? null : match.id)}
                       >
                         {/* Match header */}
@@ -258,9 +258,9 @@ export function TournamentBracket({
                             ? match.participants
                             : [match.a, match.b].filter((x): x is string => !!x);
 
-                          const displayIds = rawParticipants.length > 0
+                          const displayIds = match.sourceSlots ?? (rawParticipants.length > 0
                             ? rawParticipants
-                            : [match.a ?? null, match.b ?? null];
+                            : [match.a ?? null, match.b ?? null]);
 
                           return displayIds.map((id, pIndex) => {
                             const isWinner = !!id && (match.winner === id || match.advancers?.includes(id));
@@ -303,7 +303,7 @@ export function TournamentBracket({
                                 key={id || `slot-${pIndex}`}
                                 type="button"
                                 className={`ko-entry${isWinner ? " w" : isLoser ? " l" : ""}`}
-                                disabled={busy || !id || !!match.winner}
+                                disabled={busy || !id || !!match.winner || !isMatchReady(match)}
                                 aria-label={isWinner ? `${name}, winner` : `Choose ${name} as winner`}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -319,6 +319,7 @@ export function TournamentBracket({
                             );
                           });
                         })()}
+                        {!match.winner && !isMatchReady(match) && <p className="ko-waiting">{bracket.hasGroupStage && roundIndex === 0 ? "Waiting for group qualifiers" : "Waiting for earlier results"}</p>}
 
                         {/* Final Pill Badge (Matching the user photo) */}
                         {isFinal && (

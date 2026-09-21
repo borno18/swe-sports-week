@@ -161,7 +161,8 @@ export function FlexibleBracketView({
                   {roundName(
                     roundIndex,
                     bracket.rounds.length,
-                    "flexible"
+                    "flexible",
+                    bracket.roundConfig
                   )}
                 </h3>
                 <span className="flex-round-meta">
@@ -330,7 +331,8 @@ export function FlexibleBracketView({
                           {roundName(
                             roundIndex,
                             bracket.rounds.length,
-                            "flexible"
+                            "flexible",
+                            bracket.roundConfig
                           )}
                         </button>
                       )

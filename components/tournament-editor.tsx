@@ -1,25 +1,31 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { saveTournament, type ActionResult } from "@/app/admin/tournament-actions";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
 import { FlexibleBracketView } from "@/components/flexible-bracket-view";
 import { GameRulesCard } from "@/components/game-rules-card";
+import { GroupStageView } from "@/components/group-stage-view";
 import {
   roundName,
+  defaultRoundName,
+  validateRoundConfiguration,
+  isMatchReady,
   getMatchParticipants,
   type BracketMatch,
   type Tournament,
   type TournamentFormat,
+  type RoundConfig,
+  type GroupStageConfig,
 } from "@/lib/bracket";
 import type { Sport, GameRule } from "@/lib/data";
-import { Plus, Trash2, UserPlus, Users, X } from "lucide-react";
+import { Plus, Trash2, UserPlus, Users, X, ChevronDown, ChevronUp, Layers, Swords, Hash } from "lucide-react";
 
 const initial: ActionResult = { ok: false, message: "" };
 
-function LineupNames({ names }: { names: string }) {
+function LineupNames({ names, onCountChange }: { names: string; onCountChange?: (count: number) => void }) {
   const [value, setValue] = useState(names);
   return (
     <textarea
@@ -28,7 +34,7 @@ function LineupNames({ names }: { names: string }) {
       rows={8}
       maxLength={6000}
       value={value}
-      onChange={event => setValue(event.target.value)}
+      onChange={event => { setValue(event.target.value); onCountChange?.(event.target.value.split(/\r?\n/).filter(line => line.trim()).length); }}
       aria-describedby="lineup-help"
       placeholder={"Player or team 1\nPlayer or team 2\nPlayer or team 3\nPlayer or team 4"}
       required
@@ -44,9 +50,247 @@ function Feedback({ state }: { state: ActionResult }) {
   ) : null;
 }
 
+/* ── Tournament Builder: configurable rounds, group stage, etc. ── */
+function TournamentBuilder({
+  initialRounds,
+  initialGroupStage,
+  initialGroupStageConfig,
+  initialLegs,
+  entrantCount,
+}: {
+  initialRounds?: RoundConfig[];
+  initialGroupStage?: boolean;
+  initialGroupStageConfig?: GroupStageConfig;
+  initialLegs?: number;
+  entrantCount: number;
+}) {
+  const [rounds, setRounds] = useState<RoundConfig[]>(
+    initialRounds ?? [
+      { name: "Round 1", matchCount: 4, playersPerMatch: 2 },
+      { name: "Semi-finals", matchCount: 2, playersPerMatch: 2 },
+      { name: "Final", matchCount: 1, playersPerMatch: 2 },
+    ]
+  );
+  const [hasGroupStage, setHasGroupStage] = useState(initialGroupStage ?? false);
+  const [groupConfig, setGroupConfig] = useState<GroupStageConfig>(
+    initialGroupStageConfig ?? { groupCount: 4, playersPerGroup: 4, advancePerGroup: 2 }
+  );
+  const [legs, setLegs] = useState(initialLegs ?? 1);
+
+  const updateRound = useCallback((index: number, field: keyof RoundConfig, value: string | number) => {
+    setRounds(prev => prev.map((r, i) =>
+      i === index ? { ...r, [field]: field === "name" ? value : Number(value) || 1 } : r
+    ));
+  }, []);
+
+  const addRound = useCallback(() => {
+    setRounds(prev => {
+      return [{ name: "Opening round", matchCount: Math.min(100, (prev[0]?.matchCount ?? 1) * 2), playersPerMatch: 2 }, ...prev];
+    });
+  }, []);
+
+  const removeRound = useCallback((index: number) => {
+    setRounds(prev => prev.length <= 1 ? prev : prev.filter((_, i) => i !== index));
+  }, []);
+
+  const totalMatches = rounds.reduce((sum, r) => sum + r.matchCount, 0);
+  const firstRoundPlayers = rounds[0] ? rounds[0].matchCount * rounds[0].playersPerMatch : 0;
+  let configurationError = "";
+  try { validateRoundConfiguration(rounds, entrantCount || (hasGroupStage ? groupConfig.groupCount * groupConfig.playersPerGroup : rounds[0]?.playerCount ?? firstRoundPlayers), hasGroupStage, groupConfig); }
+  catch (error) { configurationError = error instanceof Error ? error.message : "Check your round configuration."; }
+
+  return (
+    <div className="tournament-builder">
+      {/* Hidden fields to serialize config */}
+      <input type="hidden" name="roundConfig" value={JSON.stringify(rounds)} />
+      <input type="hidden" name="hasGroupStage" value={String(hasGroupStage)} />
+      {hasGroupStage && (
+        <input type="hidden" name="groupStageConfig" value={JSON.stringify(groupConfig)} />
+      )}
+      <input type="hidden" name="legs" value={String(legs)} />
+      <input type="hidden" name="format" value="knockout" />
+      <input type="hidden" name="playersPerGame" value={String(rounds[0]?.playersPerMatch ?? 2)} />
+
+      {/* ── Group Stage Toggle ── */}
+      <div className="tb-section">
+        <div className="tb-toggle-row">
+          <div className="tb-toggle-label">
+            <Layers size={16} />
+            <div>
+              <strong>Group Stage</strong>
+              <span>Add a round-robin pool phase before knockouts</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className={`tb-switch ${hasGroupStage ? "on" : ""}`}
+            onClick={() => setHasGroupStage(prev => !prev)}
+            aria-pressed={hasGroupStage}
+            aria-label="Include group stage"
+          >
+            <span className="tb-switch-thumb" />
+          </button>
+        </div>
+
+        {hasGroupStage && (
+          <div className="tb-group-config">
+            <div className="tb-config-grid">
+              <label className="tb-field">
+                <span className="tb-field-label">Number of Groups</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={16}
+                  value={groupConfig.groupCount}
+                  onChange={e => setGroupConfig(prev => ({ ...prev, groupCount: Number(e.target.value) || 1 }))}
+                />
+              </label>
+              <label className="tb-field">
+                <span className="tb-field-label">Players per Group</span>
+                <input
+                  type="number"
+                  min={2}
+                  max={20}
+                  value={groupConfig.playersPerGroup}
+                  onChange={e => setGroupConfig(prev => ({ ...prev, playersPerGroup: Number(e.target.value) || 2 }))}
+                />
+              </label>
+              <label className="tb-field">
+                <span className="tb-field-label">Advance per Group</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={groupConfig.playersPerGroup - 1}
+                  value={groupConfig.advancePerGroup}
+                  onChange={e => setGroupConfig(prev => ({ ...prev, advancePerGroup: Number(e.target.value) || 1 }))}
+                />
+              </label>
+            </div>
+            <p className="tb-hint">
+              {groupConfig.groupCount} groups × {groupConfig.playersPerGroup} players = {groupConfig.groupCount * groupConfig.playersPerGroup} total group players.
+              Top {groupConfig.advancePerGroup} per group → {groupConfig.groupCount * groupConfig.advancePerGroup} advance to knockouts.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Rounds Configuration ── */}
+      <div className="tb-section">
+        <div className="tb-section-header">
+          <div className="tb-section-title">
+            <Swords size={16} />
+            <strong>Knockout Rounds</strong>
+          </div>
+          <button type="button" className="tb-add-round-btn" onClick={addRound} disabled={rounds.length >= 10}>
+            <Plus size={14} /> Add Round
+          </button>
+        </div>
+        <label className="tb-field">Number of knockout rounds
+          <input type="number" min={1} max={10} value={rounds.length} onChange={event => {
+            const count = Number(event.target.value);
+            if (!Number.isInteger(count) || count < 1 || count > 10) return;
+            setRounds(Array.from({ length: count }, (_, i) => ({ name: defaultRoundName(i, count), matchCount: Math.min(100, 2 ** (count - i - 1)), playersPerMatch: 2 })));
+          }} />
+        </label>
+        <p className="tb-hint">Changing the round count suggests a standard draw. Customize each round below. One winner advances from every match; unused slots become byes.</p>
+
+        <div className="tb-rounds-list">
+          {rounds.map((round, index) => (
+            <div key={index} className="tb-round-card">
+              <div className="tb-round-card-head">
+                <span className="tb-round-number">R{index + 1}</span>
+                <input
+                  type="text"
+                  className="tb-round-name-input"
+                  value={round.name}
+                  onChange={e => updateRound(index, "name", e.target.value)}
+                  placeholder={`Round ${index + 1}`}
+                  maxLength={40}
+                  required
+                  aria-label={`Round ${index + 1} name`}
+                />
+                {rounds.length > 1 && (
+                  <button
+                    type="button"
+                    className="tb-remove-round"
+                    onClick={() => removeRound(index)}
+                    title="Remove round"
+                    aria-label={`Remove round ${index + 1}`}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <div className="tb-round-card-body">
+                <label className="tb-field">
+                  <span className="tb-field-label">
+                    <Hash size={12} /> Matches
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    aria-label={`Round ${index + 1} matches`}
+                    value={round.matchCount}
+                    onChange={e => updateRound(index, "matchCount", e.target.value)}
+                  />
+                </label>
+                <label className="tb-field">
+                  <span className="tb-field-label">
+                    <Users size={12} /> Players per Match
+                  </span>
+                  <input type="number" min={2} max={48}
+                    aria-label={`Round ${index + 1} players per match`}
+                    value={round.playersPerMatch}
+                    onChange={e => updateRound(index, "playersPerMatch", e.target.value)}
+                  />
+                </label>
+                <label className="tb-field"><span className="tb-field-label">Players / teams in round</span><input type="number" min={2} max={200} aria-label={`Round ${index + 1} total players`} value={round.playerCount ?? (index ? rounds[index - 1].matchCount : hasGroupStage ? groupConfig.groupCount * groupConfig.advancePerGroup : entrantCount || firstRoundPlayers)} onChange={e => updateRound(index, "playerCount", e.target.value)} /></label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Match Format ── */}
+      <div className="tb-section">
+        <label className="tb-field">
+          <span className="tb-field-label">Matches per Tie</span>
+          <select value={legs} onChange={e => setLegs(Number(e.target.value))}>
+            <option value={1}>1 Match per tie</option>
+            <option value={2}>2 Legs (Home &amp; Away / Aggregate)</option>
+          </select>
+        </label>
+      </div>
+
+      {/* ── Summary Bar ── */}
+      {configurationError && <p className="admin-feedback error" role="alert">{configurationError}</p>}
+      <div className="tb-summary">
+        <div className="tb-summary-item">
+          <span className="tb-summary-value">{rounds.length}</span>
+          <span className="tb-summary-label">{rounds.length === 1 ? "Round" : "Rounds"}</span>
+        </div>
+        <div className="tb-summary-item">
+          <span className="tb-summary-value">{totalMatches}</span>
+          <span className="tb-summary-label">Total Matches</span>
+        </div>
+        <div className="tb-summary-item">
+          <span className="tb-summary-value">{firstRoundPlayers}</span>
+          <span className="tb-summary-label">R1 Players Needed</span>
+        </div>
+        {hasGroupStage && (
+          <div className="tb-summary-item">
+            <span className="tb-summary-value">{groupConfig.groupCount * groupConfig.advancePerGroup}</span>
+            <span className="tb-summary-label">From Groups</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function NewSectionForm({ sports }: { sports: Sport[] }) {
   const [state, action, pending] = useActionState(saveTournament, initial);
-  const [format, setFormat] = useState<TournamentFormat>("knockout");
   const router = useRouter();
 
   useEffect(() => {
@@ -80,39 +324,6 @@ export function NewSectionForm({ sports }: { sports: Sport[] }) {
             <option value="team">Teams / doubles pairs</option>
           </select>
         </label>
-        <label>
-          Tournament Format
-          <select
-            name="format"
-            value={format}
-            onChange={e => setFormat(e.target.value as TournamentFormat)}
-          >
-            <option value="knockout">Single Elimination Knockout</option>
-            <option value="round_robin">Round Robin / Group Stage (Everyone plays everyone)</option>
-            <option value="flexible">Flexible Knockout (Dynamic rounds &amp; matches)</option>
-          </select>
-        </label>
-        <label>
-          Players / Teams per Game
-          <select name="playersPerGame" defaultValue="2">
-            <option value="2">2 Players / Teams (Head-to-head / 1v1)</option>
-            <option value="3">3 Players / Teams (3-Way / Trios)</option>
-            <option value="4">4 Players / Teams (Quad / Doubles)</option>
-            <option value="6">6 Players / Teams</option>
-            <option value="8">8 Players / Teams (Battle Royale)</option>
-          </select>
-        </label>
-        <label>
-          Total Games / Matches (Optional)
-          <input type="number" name="totalGames" min={1} max={100} placeholder="Auto (calculated from entries)" />
-        </label>
-        <label>
-          Matches per Tie
-          <select name="legs">
-            <option value="1">1 Match per round</option>
-            <option value="2">2 Legs (Home &amp; Away / Aggregate)</option>
-          </select>
-        </label>
         <button className="button organizer-primary" disabled={pending}>
           {pending ? "Creating…" : "Create section"}
         </button>
@@ -136,10 +347,7 @@ export function TournamentEditor({
   const [saving, startTransition] = useTransition();
   const [details, setDetails] = useState<BracketMatch | null>(null);
   const [undo, setUndo] = useState<BracketMatch | null>(null);
-  const [lineupFormat, setLineupFormat] = useState<TournamentFormat>(tournament.bracket.format || "knockout");
-  const [lineupLegs, setLineupLegs] = useState<number>(tournament.bracket.legs || 1);
-  const [lineupPlayersPerGame, setLineupPlayersPerGame] = useState<number>(tournament.bracket.playersPerGame || 2);
-  const [lineupTotalGames, setLineupTotalGames] = useState<string>(tournament.bracket.totalGames ? String(tournament.bracket.totalGames) : "");
+  const [entrantCount, setEntrantCount] = useState(tournament.bracket.entries.length);
 
   const [showAddMatch, setShowAddMatch] = useState<boolean>(false);
   const [addMatchRound, setAddMatchRound] = useState<number>(1);
@@ -149,6 +357,7 @@ export function TournamentEditor({
   const addMatchDialogRef = useRef<HTMLDialogElement>(null);
   const published = tournament.bracket.rounds.length > 0;
   const busy = pending || saving;
+  const canChangeMatches = canEditLineup && !tournament.bracket.roundConfig?.length;
   const router = useRouter();
 
   useEffect(() => {
@@ -209,7 +418,7 @@ export function TournamentEditor({
     </>
   );
 
-  const is2LegMatch = details?.legs === 2 || tournament.bracket.legs === 2;
+  const is2LegMatch = (details?.legs ?? tournament.bracket.legs) === 2;
 
   return (
     <div className="tournament-editor">
@@ -217,7 +426,7 @@ export function TournamentEditor({
         <div>
           <span className="eyebrow">
             {tournament.entryKind === "team" ? "Team" : "Player"} ·{" "}
-            {tournament.bracket.format === "round_robin" ? "Group Stage" : tournament.bracket.format === "flexible" ? "Flexible Knockout" : "Knockout"}
+            {tournament.bracket.hasGroupStage ? "Groups + Knockout" : tournament.bracket.format === "round_robin" ? "Round robin league" : tournament.bracket.format === "flexible" ? "Flexible Knockout" : "Knockout"}
             {tournament.bracket.legs === 2 ? " (2 Legs)" : ""}
           </span>
           <h2>{tournament.title}</h2>
@@ -248,79 +457,31 @@ export function TournamentEditor({
 
       {canEditLineup && (
         <details className="lineup-panel" open={!published} key={`lineup-${published}`}>
-          <summary>{published ? "Edit player / team names" : "1. Setup Format & Lineup"}</summary>
+          <summary>{published ? "Edit player / team names" : "1. Configure Tournament & Lineup"}</summary>
           <form action={action} onSubmit={() => setResult(initial)} className="organizer-form">
             {hidden}
             <input type="hidden" name="kind" value={published ? "rename" : "lineup"} />
 
             {!published && (
-              <div className="format-selection-box">
-                <label>
-                  Tournament Format
-                  <select
-                    name="format"
-                    value={lineupFormat}
-                    onChange={e => setLineupFormat(e.target.value as TournamentFormat)}
-                  >
-                    <option value="knockout">Single Elimination Knockout</option>
-                    <option value="round_robin">Round Robin / Group Stage (Every team plays each other)</option>
-                    <option value="flexible">Flexible Knockout (Dynamic rounds &amp; matches)</option>
-                  </select>
-                </label>
-                <label>
-                  Players / Teams per Game
-                  <select
-                    name="playersPerGame"
-                    value={lineupPlayersPerGame}
-                    onChange={e => setLineupPlayersPerGame(Number(e.target.value))}
-                  >
-                    <option value={2}>2 Players / Teams (1v1 / Head-to-head)</option>
-                    <option value={3}>3 Players / Teams (3-Way / Trios)</option>
-                    <option value={4}>4 Players / Teams (Quad / 4-Player)</option>
-                    <option value={5}>5 Players / Teams</option>
-                    <option value={6}>6 Players / Teams</option>
-                    <option value={8}>8 Players / Teams</option>
-                  </select>
-                </label>
-                <label>
-                  Total Games / Matches (Optional)
-                  <input
-                    type="number"
-                    name="totalGames"
-                    min={1}
-                    max={100}
-                    value={lineupTotalGames}
-                    onChange={e => setLineupTotalGames(e.target.value)}
-                    placeholder="Auto (based on entries)"
-                  />
-                </label>
-                <label>
-                  Match Format / Legs
-                  <select
-                    name="legs"
-                    value={lineupLegs}
-                    onChange={e => setLineupLegs(Number(e.target.value))}
-                  >
-                    <option value={1}>1 Match per tie</option>
-                    <option value={2}>2 Legs (Home &amp; Away / Aggregate)</option>
-                  </select>
-                </label>
-              </div>
+              <TournamentBuilder
+                initialRounds={tournament.bracket.roundConfig}
+                initialGroupStage={tournament.bracket.hasGroupStage}
+                initialGroupStageConfig={tournament.bracket.groupStageConfig}
+                initialLegs={tournament.bracket.legs}
+                entrantCount={entrantCount}
+              />
             )}
 
             <label htmlFor="entry-names">One player or team per line</label>
             <p id="lineup-help">
               {published
                 ? "Keep the same order and number of entries. Name corrections update every match without resetting scores."
-                : lineupFormat === "round_robin"
-                  ? "Enter 2–64 names. A complete round-robin fixture list will be generated automatically for any number of teams."
-                  : lineupFormat === "flexible"
-                    ? "Enter 2–50 names. Rounds are computed dynamically — e.g. 9–16 players → 4 rounds. Preliminary matches pair extra players; the rest get byes."
-                    : "Enter 2–64 names. Paired from top to bottom; extra places receive byes and advance automatically."}
+                : "Enter every player or team once, in draw order. Group entries are assigned in order (Group A first). Round capacity is checked before publishing; single-player matches advance as byes."}
             </p>
             <LineupNames
               key={tournament.version}
               names={tournament.bracket.entries.map(entry => entry.name).join("\n")}
+              onCountChange={setEntrantCount}
             />
             <button className="button organizer-primary" disabled={busy}>
               {pending ? "Saving…" : published ? "Save name changes" : "Publish Tournament"}
@@ -331,7 +492,7 @@ export function TournamentEditor({
 
       {published && (
         <>
-          {canEditLineup && (
+          {canChangeMatches && (
             <div className="bracket-admin-toolbar">
               <div className="bracket-admin-info">
                 <span className="badge">
@@ -360,7 +521,7 @@ export function TournamentEditor({
               </>
             ) : tournament.bracket.format === "flexible" ? (
               <>
-                <b>Flexible Knockout:</b> Click a player&apos;s name to choose the winner. Winners advance to the next round automatically. Use <i>Details</i> for dates, venues, and scores.
+                <b>Flexible Knockout:</b> Select the players who advance, then click <i>Save Advancers</i> to publish the result. Use <i>Details</i> for dates, venues, and scores.
               </>
             ) : (
               <>
@@ -369,6 +530,13 @@ export function TournamentEditor({
             )}
           </p>
 
+          {tournament.bracket.hasGroupStage && <GroupStageView tournament={tournament} onWinner={record} onDetails={setDetails} busy={busy} onQualifiers={(groupId, entryIds) => {
+            const form = fields("qualifiers"); form.set("groupId", groupId); entryIds.forEach(id => form.append("qualifierId", id));
+            startTransition(async () => {
+              try { setResult(await saveTournament(initial, form)); }
+              catch { setResult({ ok: false, message: "Connection interrupted. Refresh to check the saved qualifiers." }); }
+            });
+          }} />}
           {tournament.bracket.format === "round_robin" ? (
             <RoundRobinView
               tournament={tournament}
@@ -505,13 +673,15 @@ export function TournamentEditor({
                                 name={`score_${pId}`}
                                 type="number"
                                 min={0}
-                                max={9999}
+                                max={999}
+                                aria-label={`${name} score`}
+                                disabled={!isMatchReady(details)}
                                 step={1}
                                 placeholder="Score"
                                 defaultValue={currentScore}
                                 className="participant-score-input"
                               />
-                              {canEditLineup && pId && (
+                              {canChangeMatches && pId && (
                                 <button
                                   type="button"
                                   className="remove-participant-btn"
@@ -536,7 +706,7 @@ export function TournamentEditor({
                       })}
                     </div>
 
-                    {canEditLineup && (
+                    {canChangeMatches && (
                       <div className="add-participant-to-match">
                         <select
                           value={selectedEntryToAdd}
@@ -635,7 +805,7 @@ export function TournamentEditor({
                     <button className="button organizer-primary" disabled={busy}>
                       {pending ? "Saving…" : "Save details"}
                     </button>
-                    {canEditLineup && (
+                    {canChangeMatches && (
                       <button
                         type="button"
                         className="button danger-button button-sm"
@@ -692,7 +862,7 @@ export function TournamentEditor({
             >
               {tournament.bracket.rounds.map((_, roundIdx) => (
                 <option key={roundIdx + 1} value={roundIdx + 1}>
-                  Round {roundIdx + 1} ({roundName(roundIdx, tournament.bracket.rounds.length, tournament.bracket.format || "knockout")})
+                  Round {roundIdx + 1} ({roundName(roundIdx, tournament.bracket.rounds.length, tournament.bracket.format || "knockout", tournament.bracket.roundConfig)})
                 </option>
               ))}
               <option value={tournament.bracket.rounds.length + 1}>

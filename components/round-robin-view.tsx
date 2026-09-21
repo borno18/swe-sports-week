@@ -15,11 +15,13 @@ export function RoundRobinView({
   onWinner,
   onDetails,
   busy = false,
+  groupStage = false,
 }: {
   tournament: Tournament;
   onWinner?: (match: BracketMatch, entry: string | null) => void;
   onDetails?: (match: BracketMatch) => void;
   busy?: boolean;
+  groupStage?: boolean;
 }) {
   const { bracket } = tournament;
   const entries = useMemo(() => new Map(bracket.entries.map(e => [e.id, e.name])), [bracket.entries]);
@@ -47,7 +49,7 @@ export function RoundRobinView({
       style={{ "--sport-color": sportColor } as CSSProperties}
       aria-label={`${tournament.title} round-robin league`}
     >
-      {champion ? (
+      {!groupStage && champion ? (
         <div className="ko-champion">
           <Crown strokeWidth={1.5} />
           <div>
@@ -56,7 +58,7 @@ export function RoundRobinView({
           </div>
           <small>Runner-up · {champion.runnerUp.name}</small>
         </div>
-      ) : standings.length > 0 && standings[0].played > 0 ? (
+      ) : !groupStage && standings.length > 0 && standings[0].played > 0 ? (
         <div className="ko-champion table-leader-banner">
           <Trophy strokeWidth={1.5} />
           <div>
@@ -156,14 +158,14 @@ export function RoundRobinView({
                 </div>
 
                 <div className="rr-versus-box">
-                  <div className={`rr-team-row ${winnerId === match.a ? "won" : ""}`}>
+                  {onWinner ? <button type="button" className={`rr-team-row ${winnerId === match.a ? "won" : ""}`} disabled={busy || !!winnerId || !match.a || !match.b} aria-label={`Choose ${nameA} as winner`} onClick={() => onWinner(match, match.a)}><span className="rr-team-name">{nameA}</span><span className="rr-team-score">{match.scoreA || "—"}</span></button> : <div className={`rr-team-row ${winnerId === match.a ? "won" : ""}`}>
                     <span className="rr-team-name">{nameA}</span>
                     <span className="rr-team-score">{match.scoreA || "—"}</span>
-                  </div>
-                  <div className={`rr-team-row ${winnerId === match.b ? "won" : ""}`}>
+                  </div>}
+                  {onWinner ? <button type="button" className={`rr-team-row ${winnerId === match.b ? "won" : ""}`} disabled={busy || !!winnerId || !match.a || !match.b} aria-label={`Choose ${nameB} as winner`} onClick={() => onWinner(match, match.b)}><span className="rr-team-name">{nameB}</span><span className="rr-team-score">{match.scoreB || "—"}</span></button> : <div className={`rr-team-row ${winnerId === match.b ? "won" : ""}`}>
                     <span className="rr-team-name">{nameB}</span>
                     <span className="rr-team-score">{match.scoreB || "—"}</span>
-                  </div>
+                  </div>}
                 </div>
 
                 <div className="rr-match-footer">
@@ -183,6 +185,7 @@ export function RoundRobinView({
                       >
                         <Edit2 size={12} /> Score / Details
                       </button>
+                      {onWinner && match.winner && <button type="button" className="button ghost small-button" disabled={busy} onClick={() => onWinner(match, null)}>Undo result</button>}
                       {onWinner && match.a && match.b && !match.winner && (
                         <div className="rr-quick-winner">
                           <button

@@ -51,11 +51,13 @@ export const getTournamentData = cache(async () => {
     const names = new Map(tournament.bracket.entries.map(entry => [entry.id, entry.name]));
     const format = tournament.bracket.format || "knockout";
 
-    for (const match of tournament.bracket.rounds.flat()) {
+    for (const match of [...(tournament.bracket.groupStageRounds?.flat() ?? []), ...tournament.bracket.rounds.flat()]) {
       if (match.bye) continue;
+      const groupNumber = match.groupId?.slice(1) ?? match.id.match(/^gs_g(\d+)r/)?.[1];
+      const roundLabel = groupNumber ? `Group ${String.fromCharCode(64 + Number(groupNumber))} · Round ${match.round + 1}` : roundName(match.round, tournament.bracket.rounds.length, format, tournament.bracket.roundConfig);
 
       // Flexible format: multi-player matches
-      if (format === "flexible") {
+      if (format === "flexible" || (match.participants?.length ?? 0) > 2) {
         const participants = match.participants ?? [];
         const advancers = match.advancers ?? [];
         if (participants.length === 0) continue;
@@ -68,18 +70,18 @@ export const getTournamentData = cache(async () => {
           tournamentId: tournament.id,
           icon: sport.icon,
           category: tournament.title,
-          round: roundName(match.round, tournament.bracket.rounds.length, format),
+          round: roundLabel,
           participantA: `${participants.length} players`,
           participantB: participantNames,
           scoreA: "",
           scoreB: "",
-          status: match.completedAt ? "completed" : "upcoming",
+          status: match.completedAt || match.winner ? "completed" : "upcoming",
           date: match.date,
           time: match.time || "Time TBD",
           venue: match.venue || "Venue TBD",
           day: eventDays.findIndex(day => day.date === match.date) + 1,
           completedAt: match.completedAt,
-          winner: advancerCount > 0 ? `${advancerCount} advanced` : undefined,
+          winner: match.winner ? names.get(match.winner) : advancerCount > 0 ? `${advancerCount} advanced` : undefined,
         });
         continue;
       }
@@ -100,7 +102,7 @@ export const getTournamentData = cache(async () => {
         tournamentId: tournament.id,
         icon: sport.icon,
         category: tournament.title,
-        round: roundName(match.round, tournament.bracket.rounds.length, format),
+        round: roundLabel,
         participantA: names.get(match.a ?? "") ?? (format === "round_robin" ? "Team A" : "Awaiting winner"),
         participantB: names.get(match.b ?? "") ?? (format === "round_robin" ? "Team B" : "Awaiting winner"),
         scoreA: scoreDisplayA,
@@ -131,7 +133,7 @@ export const getTournamentData = cache(async () => {
   const sports = activeCatalog.map(sport => {
     const sections = tournaments.filter(t => t.sportSlug === sport.slug);
     const published = sections.filter(t => t.bracket.rounds.length);
-    const hasRoundRobin = sections.some(t => t.bracket.format === "round_robin");
+    const hasRoundRobin = sections.some(t => t.bracket.format === "round_robin" || t.bracket.hasGroupStage);
     const hasFlexible = sections.some(t => t.bracket.format === "flexible");
     const formatLabel = hasRoundRobin ? "Group / League" : hasFlexible ? "Flexible Knockout" : "Knockout";
 

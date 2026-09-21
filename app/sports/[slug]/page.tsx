@@ -6,6 +6,7 @@ import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
 import { FlexibleBracketView } from "@/components/flexible-bracket-view";
 import { GameRulesCard } from "@/components/game-rules-card";
+import { GroupStageView } from "@/components/group-stage-view";
 import { ensureDatabaseInitialized } from "@/lib/db";
 import { getSportRule } from "@/lib/rules-store";
 
@@ -19,7 +20,7 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
   const sport = sports.find(item => item.slug === slug);
   if (!sport) notFound();
   const sections = tournaments.filter(t => t.sportSlug === slug);
-  const hasLeague = sections.some(s => s.bracket.format === "round_robin");
+  const hasLeague = sections.some(s => s.bracket.format === "round_robin" || s.bracket.hasGroupStage);
   const hasFlexible = sections.some(s => s.bracket.format === "flexible");
 
   return (
@@ -60,9 +61,10 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
           <section className="public-bracket-section" id={`section-${t.id}`} key={t.id}>
             <h2>{t.title}</h2>
             <p className="result-count">
-              {t.bracket.entries.length} {t.entryKind === "team" ? "teams / pairs" : "players"} · {t.bracket.format === "round_robin" ? "Round Robin League" : t.bracket.format === "flexible" ? "Flexible Knockout" : "Knockout"}
+              {t.bracket.entries.length} {t.entryKind === "team" ? "teams / pairs" : "players"} · {t.bracket.hasGroupStage ? "Groups + Knockout" : t.bracket.format === "round_robin" ? "Round Robin League" : t.bracket.format === "flexible" ? "Flexible Knockout" : "Knockout"}
               {t.bracket.legs === 2 ? " (2 Legs)" : ""}
             </p>
+            {t.bracket.hasGroupStage && <GroupStageView tournament={t} />}
             {t.bracket.format === "round_robin" ? (
               <RoundRobinView tournament={t} />
             ) : t.bracket.format === "flexible" ? (

@@ -5,6 +5,10 @@ import {
   addParticipantToMatch,
   chooseWinner,
   createBracket,
+  createConfiguredBracket,
+  confirmGroupQualifiers,
+  refreshGroupQualification,
+  isMatchReady,
   createFlexibleBracket,
   createRoundRobin,
   flexAddMatch,
@@ -20,6 +24,8 @@ import {
   type Bracket,
   type TournamentFormat,
   type BracketOptions,
+  type RoundConfig,
+  type GroupStageConfig,
 } from "./bracket.ts";
 
 type Row = {
@@ -39,9 +45,13 @@ export type Mutation =
       legs?: number;
       playersPerGame?: number;
       totalGames?: number;
+      roundConfig?: RoundConfig[];
+      hasGroupStage?: boolean;
+      groupStageConfig?: GroupStageConfig;
     }
   | { kind: "winner"; matchId: string; entryId: string | null }
   | { kind: "reset" }
+  | { kind: "qualifiers"; groupId: string; entryIds: string[] }
   | {
       kind: "details";
       matchId: string;
@@ -191,6 +201,9 @@ export async function mutateTournament(
     if (Number(row.version) !== version) throw new Error("Another update was saved. Refresh this page before trying again.");
 
     let bracket = decode(row).bracket;
+    if (bracket.roundConfig?.length && !["lineup", "winner", "details", "rename", "reset", "qualifiers"].includes(mutation.kind)) {
+      throw new Error("This tournament uses a configured round structure. Reset it before changing matches or participants.");
+    }
     switch (mutation.kind) {
       case "lineup": {
         if (bracket.rounds.length) throw new Error("This bracket is already published. Rename entries or reset it first.");
@@ -199,7 +212,17 @@ export async function mutateTournament(
         const pPerGame = mutation.playersPerGame || bracket.playersPerGame || 2;
         const totalG = mutation.totalGames || bracket.totalGames;
         const opts: BracketOptions = { legs: chosenLegs, playersPerGame: pPerGame, totalGames: totalG };
-        if (chosenFormat === "round_robin") {
+
+        // Use configured bracket if roundConfig is provided
+        if (mutation.roundConfig !== undefined) {
+          bracket = createConfiguredBracket(
+            mutation.names,
+            mutation.roundConfig,
+            mutation.hasGroupStage || false,
+            mutation.groupStageConfig,
+            chosenLegs,
+          );
+        } else if (chosenFormat === "round_robin") {
           bracket = createRoundRobin(mutation.names, opts);
         } else if (chosenFormat === "flexible") {
           bracket = createFlexibleBracket(mutation.names, opts);
@@ -219,14 +242,22 @@ export async function mutateTournament(
           legs: bracket.legs || 1,
           playersPerGame: bracket.playersPerGame || 2,
           totalGames: bracket.totalGames,
+          roundConfig: bracket.roundConfig,
+          hasGroupStage: bracket.hasGroupStage,
+          groupStageConfig: bracket.groupStageConfig,
         };
         break;
       case "winner":
         bracket = chooseWinner(bracket, mutation.matchId, mutation.entryId);
         break;
+      case "qualifiers":
+        bracket = confirmGroupQualifiers(bracket, mutation.groupId, mutation.entryIds);
+        break;
       case "details": {
-        const match = bracket.rounds.flat().find(item => item.id === mutation.matchId);
+        const allMatches = [...bracket.rounds.flat(), ...(bracket.groupStageRounds ? bracket.groupStageRounds.flat() : [])];
+        const match = allMatches.find(item => item.id === mutation.matchId);
         if (!match || match.bye) throw new Error("Choose a playable match.");
+        const previousScores = [match.scoreA, match.scoreB];
         if (
           mutation.date &&
           (!/^\d{4}-\d{2}-\d{2}$/.test(mutation.date) ||
@@ -266,15 +297,33 @@ export async function mutateTournament(
         });
 
         if (mutation.scores) {
+          const participantIds = getMatchParticipants(match);
+          for (const [entryId, score] of Object.entries(mutation.scores)) {
+            if (!participantIds.includes(entryId) || (score !== "" && !/^\d{1,3}$/.test(score))) throw new Error("Enter whole-number scores from 0 to 999 for this match's participants.");
+          }
+          if (Object.values(mutation.scores).some(Boolean) && !isMatchReady(match)) throw new Error("Wait for all participants before entering scores.");
           match.scores = { ...(match.scores || {}), ...mutation.scores };
           const p = getMatchParticipants(match);
           if (p[0] && mutation.scores[p[0]] !== undefined) match.scoreA = mutation.scores[p[0]];
           if (p[1] && mutation.scores[p[1]] !== undefined) match.scoreB = mutation.scores[p[1]];
         }
         if (mutation.participants) {
+          if (bracket.roundConfig) throw new Error("Participants in configured rounds come from the tournament draw.");
           match.participants = mutation.participants;
           if (!match.a) match.a = mutation.participants[0] ?? null;
           if (!match.b) match.b = mutation.participants[1] ?? null;
+        }
+        const groupMatch = bracket.groupStageRounds?.flat().some(item => item.id === match.id);
+        if (bracket.format === "round_robin" || groupMatch) {
+          const scoresChanged = previousScores[0] !== match.scoreA || previousScores[1] !== match.scoreB;
+          if (scoresChanged && match.scoreA !== "" && match.scoreB !== "") {
+            match.winner = Number(match.scoreA) === Number(match.scoreB) ? "draw" : Number(match.scoreA) > Number(match.scoreB) ? match.a : match.b;
+            match.completedAt = Date.now();
+          } else if (scoresChanged) {
+            match.winner = null;
+            match.completedAt = null;
+          }
+          if (groupMatch && scoresChanged) bracket = refreshGroupQualification(bracket, match);
         }
         break;
       }
@@ -320,5 +369,7 @@ export async function mutateTournament(
   } catch (error) {
     await tx.rollback();
     throw error;
+  } finally {
+    tx.close();
   }
 }
