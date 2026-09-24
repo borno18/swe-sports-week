@@ -9,6 +9,7 @@ const nav = [
   ["Home", "/"],
   ["Schedule", "/schedule"],
   ["Sports", "/sports"],
+  ["Volunteers", "/volunteers"],
   ["Results", "/results"],
   ["Champions", "/champions"],
   ["Announcements", "/announcements"],

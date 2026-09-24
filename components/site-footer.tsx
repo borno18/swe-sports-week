@@ -43,6 +43,7 @@ export function SiteFooter() {
             <div className="footer-links-grid">
               <Link href="/schedule">Schedule & Fixtures</Link>
               <Link href="/sports">Sports & Brackets</Link>
+              <Link href="/volunteers">Assigned Volunteers</Link>
               <Link href="/results">Results & Outcomes</Link>
               <Link href="/champions">Hall of Champions</Link>
               <Link href="/announcements">Notices & Bulletins</Link>

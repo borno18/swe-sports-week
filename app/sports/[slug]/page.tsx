@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarDays, Trophy, Users } from "lucide-react";
+import { ArrowLeft, CalendarDays, Trophy, Users, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { getTournamentData } from "@/lib/tournaments";
 import { TournamentBracket } from "@/components/tournament-bracket";
@@ -9,6 +9,7 @@ import { GameRulesCard } from "@/components/game-rules-card";
 import { GroupStageView } from "@/components/group-stage-view";
 import { ensureDatabaseInitialized } from "@/lib/db";
 import { getSportRule } from "@/lib/rules-store";
+import { getCoordinatorsForSport } from "@/lib/volunteers-data";
 
 export default async function SportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -22,19 +23,33 @@ export default async function SportPage({ params }: { params: Promise<{ slug: st
   const sections = tournaments.filter(t => t.sportSlug === slug);
   const hasLeague = sections.some(s => s.bracket.format === "round_robin" || s.bracket.hasGroupStage);
   const hasFlexible = sections.some(s => s.bracket.format === "flexible");
+  const coordinators = getCoordinatorsForSport(slug);
 
   return (
     <div className="sport-page" style={{ "--sport-color": sport.color } as React.CSSProperties}>
       <header className="sport-hero">
         <Link href="/sports"><ArrowLeft size={16} /> All sports</Link>
         <div className="sport-hero-icon">{sport.icon}</div>
-        <span>{sport.category} tournament</span>
+        <div className="sport-hero-topline">
+          <span>{sport.category} tournament</span>
+          {coordinators.length > 0 && (
+            <span className="sport-coordinator-badge">
+              <UserCheck size={14} />
+              <span><strong>Coordinator:</strong> {coordinators.join(", ")}</span>
+            </span>
+          )}
+        </div>
         <h1>{sport.name}</h1>
         <p>{sport.detail} · {sport.stage}</p>
         <div className="sport-summary">
           <span><Users /> <b>{sport.participants}</b> Players / teams</span>
           <span><CalendarDays /> <b>{sport.matches}</b> Matches</span>
           <span><Trophy /> {hasLeague ? (sections.some(s => s.bracket.format !== "round_robin") ? "League & knockout" : "Round robin league") : hasFlexible ? "Flexible knockout" : "Single elimination"}</span>
+          {coordinators.length > 0 && (
+            <span className="sport-coordinator-pill-item">
+              <UserCheck size={15} /> <b>Coordinator:</b> {coordinators.join(", ")}
+            </span>
+          )}
         </div>
       </header>
       <div className="public-brackets">

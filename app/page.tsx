@@ -4,6 +4,7 @@ import { event } from "@/lib/data";
 import { getTournamentData } from "@/lib/tournaments";
 import { SportCard } from "@/components/sport-card";
 import { EventCountdown } from "@/components/event-countdown";
+import { VolunteersSection } from "@/components/volunteers-section";
 import { Suspense } from "react";
 
 async function HeroStats() {
@@ -53,6 +54,7 @@ async function HomeTournaments() {
   return <>
     <section className="section" id="tournaments"><div className="section-heading"><div><span className="eyebrow"><GitBranch size={15} /> Every path to the final</span><h2>Pick your arena</h2></div><Link href="/sports">All sports <ChevronRight size={17} /></Link></div><div className="sports-grid">{sports.map(sport => <SportCard key={sport.slug} sport={sport} />)}</div></section>
     <section className="progress-band"><div><span className="eyebrow">Event progress</span><h2>Every match brings us closer.</h2><p>{completed.length} of {matches.length} published matches are complete.</p></div><div className="progress-visual"><strong>{progress}<sup>%</sup></strong><div className="progress-track"><span style={{ width: `${progress}%` }} /><i>{completed.length} / {matches.length}</i></div></div><div className="stage-list"><span><Trophy />{champions.length} champions crowned</span></div></section>
+    <VolunteersSection id="volunteers" />
     <section className="champion-cta"><Trophy className="trophy-watermark" /><span>Hall of champions</span><h2>Legends are made this week.</h2><p>Celebrate every winner, runner-up, and story from Sports Week.</p><Link href="/champions" className="button cream">Meet the champions <ArrowRight size={18} /></Link></section>
   </>;
 }
