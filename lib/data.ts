@@ -57,9 +57,20 @@ export function getEventDay(now = new Date()) {
   return index < 0 ? null : index + 1;
 }
 
+export function formatMatchTime(time?: string | null): string {
+  if (!time || time === "Time TBD") return "";
+  const match = time.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!match) return time;
+  const hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const h12 = hours % 12 || 12;
+  return `${h12}:${minutes} ${ampm}`;
+}
+
 export const sports: Sport[] = [
   { slug: "football", name: "Football", icon: "⚽", category: "Outdoor", color: "#72d2ff", detail: "6 batch teams", participants: 78, matches: 9, stage: "Semi Finals" },
-  { slug: "cricket", name: "Cricket", icon: "🏏", category: "Outdoor", color: "#9de393", detail: "8 batch teams", participants: 96, matches: 14, stage: "Group Stage" },
+  { slug: "cricket", name: "Cricket", icon: "🏏", category: "Outdoor", color: "#9de393", detail: "8 batch teams · 2 Groups", participants: 96, matches: 15, stage: "Group Stage" },
   { slug: "badminton", name: "Badminton", icon: "🏸", category: "Indoor", color: "#ffbd66", detail: "Singles & doubles", participants: 42, matches: 38, stage: "Quarter Finals" },
   { slug: "chess", name: "Chess", icon: "♟", category: "Indoor", color: "#d6b3ff", detail: "Single elimination", participants: 32, matches: 31, stage: "Semi Finals" },
   { slug: "table-tennis", name: "Table Tennis", icon: "🏓", category: "Indoor", color: "#ff8f9b", detail: "Singles & doubles", participants: 38, matches: 34, stage: "Round of 16" },
@@ -200,13 +211,16 @@ export const gameRules: Record<string, GameRule> = {
     sportSlug: "cricket",
     title: "Cricket Tournament – Rules & Match Format",
     format: "round_robin",
-    advancement: "৮ ব্যাচ টিম · গ্রুপ পর্ব থেকে শীর্ষ দলগুলো নকআউট পর্বে উত্তীর্ণ হবে",
+    advancement: "৮ দল (২ গ্রুপ) · প্রতি গ্রুপ থেকে পয়েন্টে সেরা দুই দল সেমিফাইনালে উত্তীর্ণ হবে",
     rules: [
-      "প্রতি ম্যাচ ৬ ওভার করে অনুষ্ঠিত হবে (বোলার প্রতি সর্বোচ্চ ২ ওভার)।",
-      "গ্রুপ পর্বে প্রতি জয়ে ২ পয়েন্ট, টাই বা পরিত্যক্ত হলে ১ পয়েন্ট করে প্রদান করা হবে।",
-      "নকআউট পর্বে টাই হলে সুপার ওভারের মাধ্যমে বিজয়ী নির্ধারণ করা হবে।"
+      "আট দলের প্রত্যেকেই নিজেদের গ্রুপের সবার সাথে এক ম্যাচ করে খেলবে। পয়েন্টে সেরা দুই দল সেমিফাইনালে জায়গা পাবে।",
+      "এক দলের হয়ে আটজন মাঠে নামবে, বাকিরা অতিরিক্ত খেলোয়াড়। অতিরিক্ত খেলোয়াড় শুধু ফিল্ডিং করতে পারবে।",
+      "খেলা হবে আট ওভারে, একজন বোলার সর্বোচ্চ ২ ওভার বল করতে পারবে।",
+      "খেলা হবে ফুল সার্কেলে। সব ধরনের বাই, লেগবাই এবং ওভার থ্রো-তে রান আছে।",
+      "ম্যাচ পরিচালনায় দুইজন আম্পায়ার থাকবেন, আম্পায়ারের সিদ্ধান্ত ই চূড়ান্ত।",
+      "কোন দল নির্দিষ্ট সময়ের মধ্যে খেলা শুরু করতে না পারলে শাস্তির মুখোমুখি হতে হবে।"
     ],
-    rounds: "গ্রুপ পর্ব (৬ ওভার) → সেমিফাইনাল → ফাইনাল",
+    rounds: "গ্রুপ পর্ব (৮ ওভার) → সেমিফাইনাল → ফাইনাল",
     tiebreaker: "পয়েন্ট সমান হলে: নেট রান রেট (NRR) → মুখোমুখি লড়াই"
   },
   "badminton": {
@@ -262,6 +276,27 @@ export const gameRules: Record<string, GameRule> = {
   }
 };
 
-export const announcements: { level: string; title: string; body: string; time: string }[] = [];
+export const announcements: { level: string; title: string; body: string; time: string }[] = [
+  {
+    level: "important",
+    title: "📢 ক্রিকেট টুর্নামেন্ট আপডেট: নিয়মাবলী ও শনিবারের সময়সূচি",
+    body: "📢 ক্রিকেট টুর্নামেন্ট আপডেট: নিয়মাবলী!\n" +
+      "১. আট দলের প্রত্যেকেই নিজেদের গ্রুপের সবার সাথে এক ম্যাচ করে খেলবে। পয়েন্টে সেরা দুই দল সেমিফাইনালে জায়গা পাবে।\n" +
+      "২. এক দলের হয়ে আটজন মাঠে নামবে, বাকিরা অতিরিক্ত খেলোয়াড়। অতিরিক্ত খেলোয়াড় শুধু ফিল্ডিং করতে পারবে।\n" +
+      "৩. খেলা হবে আট ওভারে, একজন বোলার সর্বোচ্চ ২ ওভার বল করতে পারবে।\n" +
+      "৪. খেলা হবে ফুল সার্কেলে। সব ধরনের বাই, লেগবাই এবং ওভার থ্রো-তে রান আছে।\n" +
+      "৫. ম্যাচ পরিচালনায় দুইজন আম্পায়ার থাকবেন, আম্পায়ারের সিদ্ধান্ত ই চূড়ান্ত।\n" +
+      "৬. কোন দল নির্দিষ্ট সময়ের মধ্যে খেলা শুরু করতে না পারলে শাস্তির মুখোমুখি হতে হবে।\n\n" +
+      "🏏 শনিবারের খেলার সময়সূচি (Saturday Schedule):\n" +
+      "★ MORNING ★\n" +
+      "• 7:30 - 8:30: Fakibaaz VS The 9th\n" +
+      "• 8:30 - 9:30: TLT Sports VS Binary Blusters\n\n" +
+      "★ AFTERNOON ★\n" +
+      "• 3:30 - 4:30: Jani Na VS Team Semicolon\n" +
+      "• 4:30 - 5:30: Hepta Hitters VS Backbench Blusters XI\n\n" +
+      "⏰ সকল দলকে নির্দিষ্ট সময়ের মধ্যে মাঠে উপস্থিত থাকার জন্য অনুরোধ করা হচ্ছে!",
+    time: "Saturday, 26 Sep · 1:00 AM",
+  }
+];
 
 export type Champion = { sport: string; icon: string; winner: string; runnerUp: string; batch: string };

@@ -8,7 +8,7 @@ import {
   type BracketMatch,
   type Tournament,
 } from "@/lib/bracket";
-import { sports as catalog } from "@/lib/data";
+import { sports as catalog, formatMatchTime } from "@/lib/data";
 
 export function RoundRobinView({
   tournament,
@@ -171,7 +171,7 @@ export function RoundRobinView({
                 <div className="rr-match-footer">
                   <div className="rr-meta-info">
                     {match.date && <span><Calendar size={12} /> {match.date}</span>}
-                    {match.time && <span><Clock size={12} /> {match.time}</span>}
+                    {match.time && <span><Clock size={12} /> {formatMatchTime(match.time)}</span>}
                     {match.venue && <span><MapPin size={12} /> {match.venue}</span>}
                   </div>
 

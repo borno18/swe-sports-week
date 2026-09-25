@@ -1,5 +1,5 @@
 import { MapPin, Trophy } from "lucide-react";
-import { eventDays, sports as catalog, type Match } from "@/lib/data";
+import { eventDays, sports as catalog, formatMatchTime, type Match } from "@/lib/data";
 
 export function MatchCard({ match, highlighted = false }: { match: Match; highlighted?: boolean }) {
   const isCompleted = match.status === "completed";
@@ -33,7 +33,7 @@ export function MatchCard({ match, highlighted = false }: { match: Match; highli
 
       <div className="mc-bottom">
         <span><MapPin size={12} />{match.venue}</span>
-        <span>{eventDays[match.day - 1]?.label || match.date || "TBD"}{match.time !== "Time TBD" ? ` · ${match.time}` : ""}</span>
+        <span>{eventDays[match.day - 1]?.label || match.date || "TBD"}{match.time && match.time !== "Time TBD" ? ` · ${formatMatchTime(match.time)}` : ""}</span>
       </div>
     </article>
   );

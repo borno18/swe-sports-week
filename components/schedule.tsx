@@ -35,7 +35,11 @@ export function Schedule({ initialDay, highlightedMatch, matches }: { initialDay
     if (statusFilter !== "all") {
       result = result.filter(m => m.status === statusFilter);
     }
-    return result;
+    return result.sort((a, b) => {
+      const timeA = a.time && a.time !== "Time TBD" ? a.time : "99:99";
+      const timeB = b.time && b.time !== "Time TBD" ? b.time : "99:99";
+      return timeA.localeCompare(timeB);
+    });
   }, [dayIndex, category, statusFilter, matches]);
 
   return (

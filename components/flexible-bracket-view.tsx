@@ -10,7 +10,7 @@ import {
   type BracketMatch,
   type Tournament,
 } from "@/lib/bracket";
-import { sports as catalog } from "@/lib/data";
+import { sports as catalog, formatMatchTime } from "@/lib/data";
 
 const initial: ActionResult = { ok: false, message: "" };
 
@@ -415,7 +415,7 @@ function FlexMatchCard({
                 "en-GB",
                 { day: "numeric", month: "short", timeZone: "UTC" }
               )}
-              {match.time ? ` · ${match.time}` : ""}
+              {match.time ? ` · ${formatMatchTime(match.time)}` : ""}
             </span>
           )}
           {match.venue && (

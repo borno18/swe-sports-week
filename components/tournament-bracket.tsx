@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, Trophy, Crown, Maximize2, Minimize2, Code2, Check } from "lucide-react";
 import { championOf, isMatchReady, roundName, type BracketMatch, type Tournament } from "@/lib/bracket";
-import { sports as catalog } from "@/lib/data";
+import { sports as catalog, formatMatchTime } from "@/lib/data";
 
 export function TournamentBracket({
   tournament,
@@ -242,7 +242,7 @@ export function TournamentBracket({
                                   timeZone: "UTC",
                                 })
                               : ""}
-                            {match.time ? ` · ${match.time}` : ""}
+                            {match.time ? ` · ${formatMatchTime(match.time)}` : ""}
                             {is2Leg && <strong className="ko-leg-pill"> 2 Legs</strong>}
                           </span>
                           <span
