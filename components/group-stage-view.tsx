@@ -11,11 +11,12 @@ export function GroupStageView({ tournament, onWinner, onDetails, onQualifiers, 
   onQualifiers?: (groupId: string, entries: string[]) => void;
   busy?: boolean;
 }) {
-  const groups = tournamentGroups(tournament.bracket);
+  const groups = tournamentGroups(tournament.bracket, tournament.sportSlug);
   const [active, setActive] = useState(0);
   const group = groups[Math.min(active, groups.length - 1)];
   if (!group) return null;
   const count = tournament.bracket.groupStageConfig!.advancePerGroup;
+  const isCricket = tournament.sportSlug === "cricket";
   return <section className="group-stage-view" aria-label={`${tournament.title} group stage`}>
     <div className="editor-heading"><div><span className="eyebrow">Stage 1</span><h2>Group stage</h2></div><span className="result-count">Top {count} from each group qualify</span></div>
     <div className="filter-row" role="group" aria-label="Select group">
@@ -26,8 +27,8 @@ export function GroupStageView({ tournament, onWinner, onDetails, onQualifiers, 
       event.preventDefault();
       onQualifiers(group.id, new FormData(event.currentTarget).getAll("qualifier").map(String));
     }}>
-      <p>Ranking: points, goal/score difference, then goals/scores for. Resolve remaining ties using your event’s tie-break rule.</p>
-      {Array.from({ length: count }, (_, rank) => <label key={rank}>Qualifier {rank + 1}<select name="qualifier" required defaultValue={group.qualifiers[rank] ?? ""} disabled={busy}><option value="">Choose player / team</option>{group.standings.map(row => <option key={row.id} value={row.id}>{row.name} · {row.points} pts · GD {row.gd}</option>)}</select></label>)}
+      <p>{isCricket ? "Ranking: points, Net Run Rate (NRR), then head-to-head. Resolve remaining ties using tournament rules." : "Ranking: points, goal/score difference, then goals/scores for. Resolve remaining ties using your event’s tie-break rule."}</p>
+      {Array.from({ length: count }, (_, rank) => <label key={rank}>Qualifier {rank + 1}<select name="qualifier" required defaultValue={group.qualifiers[rank] ?? ""} disabled={busy}><option value="">Choose player / team</option>{group.standings.map(row => <option key={row.id} value={row.id}>{row.name} · {row.points} pts · {isCricket ? `NRR ${row.nrr !== undefined ? (row.nrr >= 0 ? `+${row.nrr.toFixed(3)}` : row.nrr.toFixed(3)) : "0.000"}` : `GD ${row.gd}`}</option>)}</select></label>)}
       <button className="button organizer-primary" disabled={busy}>{busy ? "Saving…" : "Confirm qualifiers"}</button>
     </form>}
     <RoundRobinView key={group.id} tournament={{ ...tournament, title: `${tournament.title} · ${group.name}`, bracket: group.bracket }} onWinner={onWinner} onDetails={onDetails} busy={busy} groupStage />

@@ -62,6 +62,7 @@ export type Bracket = {
   groupStageConfig?: GroupStageConfig;  // group stage details
   groupStageRounds?: BracketMatch[][];  // group stage match rounds
   groupQualifiers?: Record<string, string[]>;
+  sportSlug?: string;
 };
 
 /** Returns all participant IDs in a match, falling back to [a, b] */
@@ -95,6 +96,8 @@ export type StandingRow = {
   ga: number;
   gd: number;
   points: number;
+  nrr?: number;
+  form?: ("W" | "L" | "D")[];
 };
 
 export function roundName(index: number, count: number, format: TournamentFormat = "knockout", roundConfig?: RoundConfig[]) {
@@ -687,8 +690,12 @@ export function renameEntries(source: Bracket, text: string) {
   return bracket;
 }
 
-export function calculateStandings(bracket: Bracket): StandingRow[] {
+export function calculateStandings(bracket: Bracket, sportSlug?: string): StandingRow[] {
+  const slug = sportSlug || bracket.sportSlug;
+  const isCricket = slug === "cricket";
   const table = new Map<string, StandingRow>();
+  const formMap = new Map<string, ("W" | "L" | "D")[]>();
+
   for (const entry of bracket.entries) {
     table.set(entry.id, {
       id: entry.id,
@@ -701,7 +708,10 @@ export function calculateStandings(bracket: Bracket): StandingRow[] {
       ga: 0,
       gd: 0,
       points: 0,
+      nrr: 0,
+      form: [],
     });
+    formMap.set(entry.id, []);
   }
 
   for (const match of bracket.rounds.flat()) {
@@ -733,22 +743,43 @@ export function calculateStandings(bracket: Bracket): StandingRow[] {
         b.drawn += 1;
         a.points += 1;
         b.points += 1;
+        formMap.get(match.a)?.push("D");
+        formMap.get(match.b)?.push("D");
       } else if (match.winner === a.id || (!match.winner && hasScores && sA > sB)) {
         a.won += 1;
         b.lost += 1;
-        a.points += 3;
+        a.points += isCricket ? 2 : 3;
+        formMap.get(match.a)?.push("W");
+        formMap.get(match.b)?.push("L");
       } else if (match.winner === b.id || (!match.winner && hasScores && sB > sA)) {
         b.won += 1;
         a.lost += 1;
-        b.points += 3;
+        b.points += isCricket ? 2 : 3;
+        formMap.get(match.b)?.push("W");
+        formMap.get(match.a)?.push("L");
       }
+    }
+  }
+
+  for (const row of table.values()) {
+    row.form = (formMap.get(row.id) ?? []).slice(-5);
+    if (isCricket) {
+      row.nrr = row.played > 0 ? (row.gf - row.ga) / (row.played * 8) : 0;
     }
   }
 
   return Array.from(table.values()).sort((x, y) => {
     if (y.points !== x.points) return y.points - x.points;
-    if (y.gd !== x.gd) return y.gd - x.gd;
-    if (y.gf !== x.gf) return y.gf - x.gf;
+    if (isCricket) {
+      const nrrX = x.nrr ?? 0;
+      const nrrY = y.nrr ?? 0;
+      if (Math.abs(nrrY - nrrX) > 0.0001) return nrrY - nrrX;
+      if (y.won !== x.won) return y.won - x.won;
+      if (y.gf !== x.gf) return y.gf - x.gf;
+    } else {
+      if (y.gd !== x.gd) return y.gd - x.gd;
+      if (y.gf !== x.gf) return y.gf - x.gf;
+    }
     return x.name.localeCompare(y.name);
   });
 }
@@ -868,17 +899,19 @@ export function isMatchReady(match: BracketMatch) {
   return !match.bye && (match.sourceSlots ? match.sourceSlots.length >= 2 && match.sourceSlots.every(Boolean) : getMatchParticipants(match).length >= 2);
 }
 
-export function tournamentGroups(bracket: Bracket) {
+export function tournamentGroups(bracket: Bracket, sportSlug?: string) {
   if (!bracket.hasGroupStage || !bracket.groupStageConfig) return [];
   const config = bracket.groupStageConfig;
+  const slug = sportSlug || bracket.sportSlug;
+  const isCricket = slug === "cricket";
   return Array.from({ length: config.groupCount }, (_, index) => {
     const id = `g${index + 1}`;
     const entries = bracket.entries.slice(index * config.playersPerGroup, (index + 1) * config.playersPerGroup);
     const rounds = (bracket.groupStageRounds ?? []).map(round => round.filter(m => m.groupId === id || m.id.startsWith(`gs_${id}r`))).filter(round => round.length);
-    const groupBracket: Bracket = { entries, rounds, format: 'round_robin', legs: 1 };
-    const standings = calculateStandings(groupBracket);
+    const groupBracket: Bracket = { entries, rounds, format: 'round_robin', legs: 1, sportSlug: slug };
+    const standings = calculateStandings(groupBracket, slug);
     const complete = rounds.length > 0 && rounds.flat().every(m => Boolean(m.winner));
-    const sameRank = (a: StandingRow, b?: StandingRow) => !!b && a.points === b.points && a.gd === b.gd && a.gf === b.gf;
+    const sameRank = (a: StandingRow, b?: StandingRow) => !!b && a.points === b.points && (isCricket ? Math.abs((a.nrr ?? 0) - (b.nrr ?? 0)) < 0.0001 : (a.gd === b.gd && a.gf === b.gf));
     const tied = complete && standings.slice(0, config.advancePerGroup).some((row, i) => sameRank(row, standings[i + 1]));
     const confirmed = bracket.groupQualifiers?.[id];
     const qualifiers = complete ? confirmed ?? (tied ? [] : standings.slice(0, config.advancePerGroup).map(row => row.id)) : [];
@@ -909,16 +942,19 @@ export function propagateConfigured(bracket: Bracket): Bracket {
   return bracket;
 }
 
-export function confirmGroupQualifiers(source: Bracket, groupId: string, entryIds: string[]) {
+export function confirmGroupQualifiers(source: Bracket, groupId: string, entryIds: string[], sportSlug?: string) {
   const bracket = structuredClone(source);
-  const group = tournamentGroups(bracket).find(g => g.id === groupId);
+  const group = tournamentGroups(bracket, sportSlug).find(g => g.id === groupId);
   const count = bracket.groupStageConfig?.advancePerGroup;
   if (!group || !group.complete || !count) throw new Error("Finish every group match before confirming qualifiers.");
   if (entryIds.length !== count || new Set(entryIds).size !== count) throw new Error(`Choose ${count} different qualifiers in finishing order.`);
+  const isCricket = (sportSlug || bracket.sportSlug) === "cricket";
   entryIds.forEach((id, rank) => {
     const entry = group.standings.find(row => row.id === id);
     const expected = group.standings[rank];
-    if (!entry || entry.points !== expected.points || entry.gd !== expected.gd || entry.gf !== expected.gf) throw new Error("Keep the standings order; choose between tied players only.");
+    if (!entry || entry.points !== expected.points || (isCricket ? Math.abs((entry.nrr ?? 0) - (expected.nrr ?? 0)) >= 0.0001 : (entry.gd !== expected.gd || entry.gf !== expected.gf))) {
+      throw new Error("Keep the standings order; choose between tied players only.");
+    }
   });
   bracket.groupQualifiers = { ...bracket.groupQualifiers, [groupId]: entryIds };
   return propagateConfigured(bracket);
