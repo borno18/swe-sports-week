@@ -2949,3 +2949,68 @@ button.rr-team-row:disabled { cursor: default; opacity: 1; }
   .organizer-form input, .organizer-form select, .organizer-form textarea,
   .admin-card input, .tb-field input { font-size: 16px; }
 }
+
+/* Cricket has its own column contract; generic compact table widths must not
+   override the space occupied by names, crests, or pinned cells. */
+.cricket-table-theme { overflow: hidden; }
+.cricket-table-scroll { border: 0; border-radius: 0; isolation: isolate; }
+.rr-table.cricket-rr-table {
+  --cricket-rank-width: 44px;
+  --cricket-team-width: 220px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  min-width: 688px;
+}
+.cricket-col-rank { width: var(--cricket-rank-width); }
+.cricket-col-team { width: var(--cricket-team-width); }
+.cricket-col-stat { width: 48px; }
+.cricket-col-nrr { width: 88px; }
+.cricket-col-points { width: 52px; }
+.cricket-col-form { width: 140px; }
+.rr-table.cricket-rr-table :is(.th-rank, .td-rank) { width: var(--cricket-rank-width); }
+.rr-table.cricket-rr-table :is(.th-team, .td-team) {
+  width: var(--cricket-team-width);
+  min-width: 0;
+  white-space: normal;
+  overflow: hidden;
+}
+.cricket-team-cell { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 6px; min-width: 0; }
+.cricket-team-badge { width: 28px; height: 28px; font-size: 9px; }
+.cricket-team-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+.cricket-team-cell .qualifier-badge { margin-left: 0; flex-shrink: 0; }
+.cricket-table-footer { flex-wrap: wrap; gap: 8px; }
+.cricket-table-footer > span { min-width: 0; line-height: 1.5; }
+.cricket-table-footer .qualifier-dot-guide { flex-shrink: 0; }
+@media (max-width: 768px) {
+  .rr-table.cricket-rr-table {
+    --cricket-rank-width: 32px;
+    --cricket-team-width: 160px;
+    width: 616px;
+    min-width: 616px;
+  }
+  .rr-table.cricket-rr-table th, .rr-table.cricket-rr-table td { padding: 12px 6px; }
+  .rr-table.cricket-rr-table :is(.th-rank, .td-rank) { position: sticky; left: 0; z-index: 3; background: #fff; }
+  .rr-table.cricket-rr-table .qualifier-spot td.td-rank { position: sticky; left: 0; }
+  .rr-table.cricket-rr-table :is(.th-team, .td-team) { position: sticky; left: var(--cricket-rank-width); z-index: 2; background: #fff; }
+  .rr-table.cricket-rr-table .qualifier-spot :is(.td-rank, .td-team) { background: color-mix(in srgb, var(--sport-color, #9de393) 14%, #fff); }
+  .rr-table.cricket-rr-table :is(.th-rank, .th-team) { background: color-mix(in srgb, var(--sport-color, #9de393) 24%, #f8fbf9); }
+  .rr-table.cricket-rr-table .th-pts, .rr-table.cricket-rr-table .td-pts { padding-right: 6px; }
+  .cricket-table-footer { padding: 12px; }
+  .rr-card-head { flex-wrap: wrap; }
+}
+
+@media (max-width: 620px) {
+  .ko-cl-controls { display: grid; grid-template-columns: minmax(0, 1fr) 44px 44px; gap: 8px; padding: 12px; }
+  .ko-cl-title { min-width: 0; grid-column: 1; grid-row: 1; }
+  .ko-cl-title strong { overflow-wrap: anywhere; }
+  .ko-cl-actions { display: contents; }
+  .ko-cl-btn { width: 44px; height: 44px; }
+  .ko-cl-actions > .ko-cl-btn:first-child { grid-column: 2; grid-row: 1; }
+  .ko-cl-actions > .ko-cl-btn:last-child { grid-column: 3; grid-row: 1; }
+  .ko-cl-select-wrap { min-width: 0; grid-column: 1; grid-row: 2; }
+  .ko-cl-select-wrap select { width: 100%; min-width: 0; height: 44px; font-size: 16px; padding: 8px; }
+  .ko-cl-actions > .ko-cl-btn:nth-child(3) { grid-column: 2; grid-row: 2; }
+  .ko-cl-actions > .ko-cl-btn:nth-child(4) { grid-column: 3; grid-row: 2; }
+}

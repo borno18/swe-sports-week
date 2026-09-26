@@ -101,9 +101,15 @@ export function RoundRobinView({
         </div>
         <p className="rr-scroll-hint">Swipe the table for all stats <span aria-hidden="true">↔</span></p>
         {isCricket ? (
-          <div className="rr-table-wrapper cricket-table-theme" role="region" aria-label={`${tournament.title} cricket standings, scroll for all statistics`} tabIndex={0}>
+          <div className="cricket-table-theme">
+          <div className="rr-table-wrapper cricket-table-scroll" role="region" aria-label={`${tournament.title} cricket standings, scroll for all statistics`} tabIndex={0}>
             <table className="rr-table cricket-rr-table">
               <caption className="sr-only">{tournament.title} cricket standings. M: matches, W: won, L: lost, NRR: net run rate, Pts: points, Last 5: recent form.</caption>
+              <colgroup>
+                <col className="cricket-col-rank" /><col className="cricket-col-team" />
+                <col className="cricket-col-stat" /><col className="cricket-col-stat" /><col className="cricket-col-stat" />
+                <col className="cricket-col-nrr" /><col className="cricket-col-points" /><col className="cricket-col-form" />
+              </colgroup>
               <thead>
                 <tr>
                   <th className="th-rank">#</th>
@@ -189,6 +195,7 @@ export function RoundRobinView({
                 })}
               </tbody>
             </table>
+          </div>
             <div className="cricket-table-footer">
               <span><span className="qualifier-dot-guide" /> Top 2 teams advance to Semi-finals</span>
               <span>Win = 2 Pts · Tie/NR = 1 Pt · Loss = 0 Pts</span>
