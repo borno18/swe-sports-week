@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, useMemo, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, Trophy, Crown, Maximize2, Minimize2, Code2, Check } from "lucide-react";
-import { championOf, isMatchReady, roundName, type BracketMatch, type Tournament } from "@/lib/bracket";
+import { championOf, formatCricketScore, isMatchReady, roundName, type BracketMatch, type Tournament } from "@/lib/bracket";
 import { sports as catalog, formatMatchTime } from "@/lib/data";
 
 export function TournamentBracket({
@@ -279,6 +279,7 @@ export function TournamentBracket({
                                 : pIndex === 1
                                   ? match.scoreB
                                   : "";
+                            if (tournament.sportSlug === "cricket") scoreDisplay = formatCricketScore(match, id);
 
                             const s2 = pIndex === 0 ? match.scoreA2 : pIndex === 1 ? match.scoreB2 : undefined;
                             if (is2Leg && s2) {

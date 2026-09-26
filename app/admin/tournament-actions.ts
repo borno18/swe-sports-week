@@ -83,9 +83,18 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
         break;
       case "details": {
         const scores: Record<string, string> = {};
+        const cricketScores: Record<string, { score: string; overs: string; allOut: boolean }> = {};
         for (const [k, v] of form.entries()) {
           if (k.startsWith("score_") && typeof v === "string") {
             scores[k.replace("score_", "")] = v.trim();
+          }
+          if (k.startsWith("cricket_score_") && typeof v === "string") {
+            const id = k.slice("cricket_score_".length);
+            cricketScores[id] = {
+              score: v.trim(),
+              overs: field(form, `cricket_overs_${id}`),
+              allOut: form.has(`cricket_all_out_${id}`),
+            };
           }
         }
         mutation = {
@@ -102,6 +111,7 @@ export async function saveTournament(_state: ActionResult, form: FormData): Prom
           scoreA2: field(form, "scoreA2") !== "" ? field(form, "scoreA2") : undefined,
           scoreB2: field(form, "scoreB2") !== "" ? field(form, "scoreB2") : undefined,
           scores: Object.keys(scores).length > 0 ? scores : undefined,
+          cricketScores: Object.keys(cricketScores).length > 0 ? cricketScores : undefined,
         };
         break;
       }

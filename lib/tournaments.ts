@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { ensureDatabaseInitialized } from "@/lib/db";
 import { sports as catalog, eventDays, type Match, type Champion, type Sport } from "@/lib/data";
-import { championOf, roundName } from "@/lib/bracket";
+import { championOf, formatCricketScore, roundName } from "@/lib/bracket";
 import { listTournaments } from "@/lib/tournament-store";
 import { listSports } from "@/lib/sports-store";
 import { initializeCatalog } from "@/lib/catalog-store";
@@ -91,8 +91,8 @@ export const getTournamentData = cache(async () => {
         continue;
       }
 
-      let scoreDisplayA = match.scoreA;
-      let scoreDisplayB = match.scoreB;
+      let scoreDisplayA = sport.slug === "cricket" ? formatCricketScore(match, match.a) : match.scoreA;
+      let scoreDisplayB = sport.slug === "cricket" ? formatCricketScore(match, match.b) : match.scoreB;
       if (match.legs === 2 && (match.scoreA2 || match.scoreB2)) {
         const aggA = (Number(match.scoreA) || 0) + (Number(match.scoreA2) || 0);
         const aggB = (Number(match.scoreB) || 0) + (Number(match.scoreB2) || 0);

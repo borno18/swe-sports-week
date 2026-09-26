@@ -2123,6 +2123,18 @@ button.flex-player:hover:not(:disabled) {
   font-weight: 800 !important;
   text-align: center;
 }
+.cricket-score-row { align-items: start; }
+.cricket-score-row .participant-badge-name { padding-top: 21px; }
+.cricket-score-row .participant-score-input-wrap { flex-wrap: wrap; justify-content: flex-end; }
+.cricket-score-field { display: grid; gap: 4px; font-size: 11px; font-weight: 700; color: #62647b; }
+.cricket-score-field .participant-score-input { width: 92px !important; }
+.cricket-all-out { display: flex; align-items: center; gap: 4px; align-self: end; min-height: 35px; font-size: 12px; white-space: nowrap; }
+.cricket-score-help { margin: 0; color: #62647b; font-size: 12px; line-height: 1.5; }
+@media (max-width: 560px) {
+  .cricket-score-row { display: grid; }
+  .cricket-score-row .participant-badge-name { padding-top: 0; }
+  .cricket-score-row .participant-score-input-wrap { justify-content: flex-start; }
+}
 .remove-participant-btn {
   display: grid;
   place-items: center;

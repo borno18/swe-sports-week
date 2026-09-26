@@ -1,5 +1,26 @@
 export type Entry = { id: string; name: string };
 
+export const CRICKET_BALLS_PER_INNINGS = 48;
+export type CricketInnings = { wickets: number | null; balls: number; allOut: boolean };
+
+export function parseCricketOvers(value: string): number | null {
+  if (!/^(?:[0-7](?:\.[0-5])?|8(?:\.0)?)$/.test(value)) return null;
+  const [overs, balls = "0"] = value.split(".");
+  const total = Number(overs) * 6 + Number(balls);
+  return total > 0 && total <= CRICKET_BALLS_PER_INNINGS ? total : null;
+}
+
+export function formatCricketOvers(balls: number): string {
+  return `${Math.floor(balls / 6)}.${balls % 6}`;
+}
+
+export function formatCricketScore(match: BracketMatch, entryId: string | null): string {
+  if (!entryId) return "";
+  const score = match.scores?.[entryId] ?? (entryId === match.a ? match.scoreA : entryId === match.b ? match.scoreB : "");
+  const wickets = match.cricketInnings?.[entryId]?.wickets;
+  return score !== "" && wickets != null ? `${score}/${wickets}` : score;
+}
+
 export type BracketMatch = {
   id: string;
   round: number;
@@ -25,6 +46,7 @@ export type BracketMatch = {
   participants?: string[];  // all entry IDs in this match (2–48)
   advancers?: string[];     // entry IDs that advance to next round
   scores?: Record<string, string>; // entry ID -> score string
+  cricketInnings?: Record<string, CricketInnings>; // entry ID -> wickets, balls bowled and all-out status
   sourceSlots?: (string | null)[]; // fixed incoming slots; null means a result is pending
   groupId?: string;
 };
@@ -387,6 +409,7 @@ export function removeParticipantFromMatch(source: Bracket, matchId: string, par
   if (match.winner === participantId) match.winner = null;
   if (match.advancers) match.advancers = match.advancers.filter(id => id !== participantId);
   if (match.scores) delete match.scores[participantId];
+  if (match.cricketInnings) delete match.cricketInnings[participantId];
   return bracket;
 }
 
@@ -695,6 +718,7 @@ export function calculateStandings(bracket: Bracket, sportSlug?: string): Standi
   const isCricket = slug === "cricket";
   const table = new Map<string, StandingRow>();
   const formMap = new Map<string, ("W" | "L" | "D")[]>();
+  const cricketTotals = new Map<string, { runsFor: number; ballsFaced: number; runsAgainst: number; ballsBowled: number }>();
 
   for (const entry of bracket.entries) {
     table.set(entry.id, {
@@ -712,6 +736,7 @@ export function calculateStandings(bracket: Bracket, sportSlug?: string): Standi
       form: [],
     });
     formMap.set(entry.id, []);
+    cricketTotals.set(entry.id, { runsFor: 0, ballsFaced: 0, runsAgainst: 0, ballsBowled: 0 });
   }
 
   for (const match of bracket.rounds.flat()) {
@@ -737,6 +762,19 @@ export function calculateStandings(bracket: Bracket, sportSlug?: string): Standi
       b.ga += goalsA;
       a.gd = a.gf - a.ga;
       b.gd = b.gf - b.ga;
+
+      if (isCricket && hasScores) {
+        const inningsA = match.cricketInnings?.[match.a];
+        const inningsB = match.cricketInnings?.[match.b];
+        const ballsA = inningsA?.allOut ? CRICKET_BALLS_PER_INNINGS : inningsA?.balls ?? CRICKET_BALLS_PER_INNINGS;
+        const ballsB = inningsB?.allOut ? CRICKET_BALLS_PER_INNINGS : inningsB?.balls ?? CRICKET_BALLS_PER_INNINGS;
+        const totalsA = cricketTotals.get(match.a)!;
+        const totalsB = cricketTotals.get(match.b)!;
+        totalsA.runsFor += sA; totalsA.ballsFaced += ballsA;
+        totalsA.runsAgainst += sB; totalsA.ballsBowled += ballsB;
+        totalsB.runsFor += sB; totalsB.ballsFaced += ballsB;
+        totalsB.runsAgainst += sA; totalsB.ballsBowled += ballsA;
+      }
 
       if (match.winner === "draw" || (hasScores && sA === sB && !match.winner)) {
         a.drawn += 1;
@@ -764,7 +802,10 @@ export function calculateStandings(bracket: Bracket, sportSlug?: string): Standi
   for (const row of table.values()) {
     row.form = (formMap.get(row.id) ?? []).slice(-5);
     if (isCricket) {
-      row.nrr = row.played > 0 ? (row.gf - row.ga) / (row.played * 8) : 0;
+      const totals = cricketTotals.get(row.id)!;
+      row.nrr = totals.ballsFaced && totals.ballsBowled
+        ? (totals.runsFor * 6 / totals.ballsFaced) - (totals.runsAgainst * 6 / totals.ballsBowled)
+        : 0;
     }
   }
 
@@ -876,6 +917,7 @@ function clearMatchResult(match: BracketMatch) {
   match.completedAt = null;
   match.scoreA = ''; match.scoreB = ''; match.scoreA2 = ''; match.scoreB2 = '';
   match.scores = {}; match.advancers = [];
+  match.cricketInnings = {};
 }
 
 function assignConfiguredRound(matches: BracketMatch[], slots: (string | null)[]) {

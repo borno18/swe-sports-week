@@ -13,6 +13,9 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Intra SWE Sports Week 2026",
   description: "The live tournament hub for Intra SWE Sports Week, SUST.",
+  verification: {
+    google: "google51095d9edc59cf78",
+  },
 };
 
 async function LiveUpdates() {

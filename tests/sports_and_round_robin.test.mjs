@@ -10,6 +10,8 @@ import {
   championOf,
   createBracket,
   chooseWinner,
+  parseCricketOvers,
+  formatCricketScore,
 } from '../lib/bracket.ts';
 import {
   initializeSports,
@@ -59,6 +61,82 @@ test('Round Robin generates fair schedule for odd and even teams and calculates 
   assert.equal(loser.lost, 1);
   assert.equal(loser.points, 0);
   assert.equal(loser.gd, -2);
+});
+
+test('cricket NRR uses balls bowled, full quota for all out, and aggregate innings rates', () => {
+  assert.equal(parseCricketOvers('7.2'), 44);
+  assert.equal(parseCricketOvers('8.0'), 48);
+  assert.equal(parseCricketOvers('7.6'), null);
+  assert.equal(parseCricketOvers('8.1'), null);
+  assert.equal(parseCricketOvers('0.0'), null);
+
+  const bracket = createRoundRobin('Alpha\nBeta\nGamma');
+  bracket.sportSlug = 'cricket';
+  const alpha = bracket.entries.find(e => e.name === 'Alpha').id;
+  const beta = bracket.entries.find(e => e.name === 'Beta').id;
+  const gamma = bracket.entries.find(e => e.name === 'Gamma').id;
+  const alphaBeta = bracket.rounds.flat().find(m => [m.a, m.b].includes(alpha) && [m.a, m.b].includes(beta));
+  alphaBeta.scoreA = alphaBeta.a === alpha ? '121' : '120';
+  alphaBeta.scoreB = alphaBeta.b === alpha ? '121' : '120';
+  alphaBeta.winner = alpha;
+  alphaBeta.cricketInnings = {
+    [alpha]: { wickets: 3, balls: 44, allOut: false },
+    [beta]: { wickets: 4, balls: 48, allOut: false },
+  };
+  assert.equal(formatCricketScore(alphaBeta, alpha), '121/3');
+  let rows = calculateStandings(bracket);
+  assert.ok(Math.abs(rows.find(r => r.id === alpha).nrr - 1.5) < 1e-9);
+  assert.ok(Math.abs(rows.find(r => r.id === beta).nrr + 1.5) < 1e-9);
+
+  const alphaGamma = bracket.rounds.flat().find(m => [m.a, m.b].includes(alpha) && [m.a, m.b].includes(gamma));
+  alphaGamma.scoreA = alphaGamma.a === alpha ? '60' : '61';
+  alphaGamma.scoreB = alphaGamma.b === alpha ? '60' : '61';
+  alphaGamma.winner = gamma;
+  alphaGamma.cricketInnings = {
+    [alpha]: { wickets: 10, balls: 36, allOut: true },
+    [gamma]: { wickets: 2, balls: 36, allOut: false },
+  };
+  rows = calculateStandings(bracket);
+  const expected = 181 / (92 / 6) - 181 / 14;
+  assert.ok(Math.abs(rows.find(r => r.id === alpha).nrr - expected) < 1e-9);
+
+  const legacy = createRoundRobin('Legacy A\nLegacy B');
+  legacy.sportSlug = 'cricket';
+  const match = legacy.rounds.flat()[0];
+  match.scoreA = '91'; match.scoreB = '86'; match.winner = match.a;
+  assert.equal(calculateStandings(legacy)[0].nrr, 0.625);
+});
+
+test('cricket innings save through tournament mutation and reject invalid overs and wickets', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cricket-scores-test-'));
+  const db = createClient({ url: `file:${join(dir, 'scores.db')}` });
+  try {
+    await db.execute(`CREATE TABLE tournaments (id TEXT PRIMARY KEY, sport_slug TEXT NOT NULL, title TEXT NOT NULL, entry_kind TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0, bracket TEXT NOT NULL)`);
+    await db.execute(`CREATE TABLE tournament_changes (id TEXT PRIMARY KEY, tournament_id TEXT NOT NULL, actor_id TEXT NOT NULL, action TEXT NOT NULL, previous_bracket TEXT NOT NULL, created_at INTEGER NOT NULL)`);
+    const id = await addTournament(db, 'cricket', 'Test Cricket', 'team', 'round_robin');
+    const lined = await mutateTournament(db, id, 0, 'admin', { kind: 'lineup', names: 'Alpha\nBeta', format: 'round_robin' });
+    const match = lined.bracket.rounds[0][0];
+    const base = {
+      kind: 'details', matchId: match.id, date: '', time: '', venue: '', scoreA: '', scoreB: '',
+      cricketScores: {
+        [match.a]: { score: '91-3', overs: '8.0', allOut: false },
+        [match.b]: { score: '86/4', overs: '7.2', allOut: false },
+      },
+    };
+    await assert.rejects(mutateTournament(db, id, 1, 'admin', { ...base, cricketScores: { ...base.cricketScores, [match.b]: { score: '86/4', overs: '7.6', allOut: false } } }), /overs/);
+    await assert.rejects(mutateTournament(db, id, 1, 'admin', { ...base, cricketScores: { ...base.cricketScores, [match.b]: { score: '86/11', overs: '7.2', allOut: false } } }), /Wickets/);
+    const saved = await mutateTournament(db, id, 1, 'admin', base);
+    const result = saved.bracket.rounds[0][0];
+    assert.equal(formatCricketScore(result, match.a), '91/3');
+    assert.equal(formatCricketScore(result, match.b), '86/4');
+    assert.equal(result.cricketInnings[match.b].balls, 44);
+    assert.equal(result.winner, match.a);
+    const persisted = (await listTournaments(db)).find(t => t.id === id);
+    assert.equal(persisted.bracket.rounds[0][0].cricketInnings[match.b].balls, 44);
+  } finally {
+    db.close();
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch {}
+  }
 });
 
 test('Two-leg ties support 2 matches and aggregate scoring', () => {

@@ -4,6 +4,7 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { Trophy, Crown, Calendar, MapPin, Clock, Edit2, Check, X, Minus } from "lucide-react";
 import {
   calculateStandings,
+  formatCricketScore,
   championOf,
   type BracketMatch,
   type Tournament,
@@ -271,6 +272,8 @@ export function RoundRobinView({
             const nameB = match.b ? entries.get(match.b) ?? "Team B" : "TBD";
             const isCompleted = !!match.completedAt || (match.scoreA !== "" && match.scoreB !== "");
             const winnerId = match.winner;
+            const scoreA = isCricket ? formatCricketScore(match, match.a) : match.scoreA;
+            const scoreB = isCricket ? formatCricketScore(match, match.b) : match.scoreB;
 
             return (
               <article
@@ -285,13 +288,13 @@ export function RoundRobinView({
                 </div>
 
                 <div className="rr-versus-box">
-                  {onWinner ? <button type="button" className={`rr-team-row ${winnerId === match.a ? "won" : ""}`} disabled={busy || !!winnerId || !match.a || !match.b} aria-label={`Choose ${nameA} as winner`} onClick={() => onWinner(match, match.a)}><span className="rr-team-name">{nameA}</span><span className="rr-team-score">{match.scoreA || "—"}</span></button> : <div className={`rr-team-row ${winnerId === match.a ? "won" : ""}`}>
+                  {onWinner ? <button type="button" className={`rr-team-row ${winnerId === match.a ? "won" : ""}`} disabled={busy || !!winnerId || !match.a || !match.b} aria-label={`Choose ${nameA} as winner`} onClick={() => onWinner(match, match.a)}><span className="rr-team-name">{nameA}</span><span className="rr-team-score">{scoreA || "—"}</span></button> : <div className={`rr-team-row ${winnerId === match.a ? "won" : ""}`}>
                     <span className="rr-team-name">{nameA}</span>
-                    <span className="rr-team-score">{match.scoreA || "—"}</span>
+                    <span className="rr-team-score">{scoreA || "—"}</span>
                   </div>}
-                  {onWinner ? <button type="button" className={`rr-team-row ${winnerId === match.b ? "won" : ""}`} disabled={busy || !!winnerId || !match.a || !match.b} aria-label={`Choose ${nameB} as winner`} onClick={() => onWinner(match, match.b)}><span className="rr-team-name">{nameB}</span><span className="rr-team-score">{match.scoreB || "—"}</span></button> : <div className={`rr-team-row ${winnerId === match.b ? "won" : ""}`}>
+                  {onWinner ? <button type="button" className={`rr-team-row ${winnerId === match.b ? "won" : ""}`} disabled={busy || !!winnerId || !match.a || !match.b} aria-label={`Choose ${nameB} as winner`} onClick={() => onWinner(match, match.b)}><span className="rr-team-name">{nameB}</span><span className="rr-team-score">{scoreB || "—"}</span></button> : <div className={`rr-team-row ${winnerId === match.b ? "won" : ""}`}>
                     <span className="rr-team-name">{nameB}</span>
-                    <span className="rr-team-score">{match.scoreB || "—"}</span>
+                    <span className="rr-team-score">{scoreB || "—"}</span>
                   </div>}
                 </div>
 

@@ -13,6 +13,7 @@ import {
   validateRoundConfiguration,
   isMatchReady,
   getMatchParticipants,
+  formatCricketOvers,
   type BracketMatch,
   type Tournament,
   type TournamentFormat,
@@ -663,14 +664,26 @@ export function TournamentEditor({
                         const entry = tournament.bracket.entries.find(e => e.id === pId);
                         const name = entry?.name || (pId ? "Unknown" : "TBD");
                         const currentScore = details.scores?.[pId] ?? (idx === 0 ? details.scoreA : idx === 1 ? details.scoreB : "");
+                        const cricket = tournament.sportSlug === "cricket";
+                        const innings = details.cricketInnings?.[pId];
                         return (
-                          <div key={pId || idx} className="participant-score-row">
+                          <div key={pId || idx} className={`participant-score-row ${cricket ? "cricket-score-row" : ""}`}>
                             <div className="participant-badge-name">
                               <span className="participant-idx">#{idx + 1}</span>
                               <span className="participant-name">{name}</span>
                             </div>
                             <div className="participant-score-input-wrap">
-                              <input
+                              {cricket ? <>
+                                <label className="cricket-score-field">
+                                  <span>Runs/Wickets</span>
+                                  <input name={`cricket_score_${pId}`} type="text" inputMode="numeric" pattern="[0-9]{1,3}([/-][0-9]{1,2})?" aria-label={`${name} runs and wickets`} disabled={!isMatchReady(details)} placeholder="91/3" defaultValue={currentScore && innings?.wickets != null ? `${currentScore}/${innings.wickets}` : currentScore} className="participant-score-input" />
+                                </label>
+                                <label className="cricket-score-field">
+                                  <span>Overs</span>
+                                  <input name={`cricket_overs_${pId}`} type="text" inputMode="decimal" pattern="([0-7](\.[0-5])?|8(\.0)?)" aria-label={`${name} overs played`} disabled={!isMatchReady(details)} placeholder="8.0" defaultValue={currentScore ? formatCricketOvers(innings?.balls ?? 48) : ""} className="participant-score-input" />
+                                </label>
+                                <label className="cricket-all-out"><input name={`cricket_all_out_${pId}`} type="checkbox" defaultChecked={innings?.allOut ?? false} disabled={!isMatchReady(details)} /> All out</label>
+                              </> : <input
                                 name={`score_${pId}`}
                                 type="number"
                                 min={0}
@@ -681,7 +694,7 @@ export function TournamentEditor({
                                 placeholder="Score"
                                 defaultValue={currentScore}
                                 className="participant-score-input"
-                              />
+                              />}
                               {canChangeMatches && pId && (
                                 <button
                                   type="button"
@@ -706,6 +719,7 @@ export function TournamentEditor({
                         );
                       })}
                     </div>
+                    {tournament.sportSlug === "cricket" && <p className="cricket-score-help">Enter 91/3 or 91-3, then overs. 7.2 means 7 overs and 2 balls. Earlier scores without overs count as 8.0 until corrected.</p>}
 
                     {canChangeMatches && (
                       <div className="add-participant-to-match">

@@ -17,6 +17,8 @@ import {
   flexSetAdvancers,
   flexUpdateParticipants,
   getMatchParticipants,
+  parseCricketOvers,
+  type CricketInnings,
   removeMatchFromTournament,
   removeParticipantFromMatch,
   renameEntries,
@@ -66,6 +68,7 @@ export type Mutation =
       scoreA2?: string;
       scoreB2?: string;
       scores?: Record<string, string>;
+      cricketScores?: Record<string, { score: string; overs: string; allOut: boolean }>;
       participants?: string[];
     }
   | { kind: "add_match"; round: number; participantIds: string[] }
@@ -104,6 +107,7 @@ function decode(row: Row): Tournament {
   const parsed = JSON.parse(String(row.bracket)) as Bracket;
   if (!parsed.format) parsed.format = "knockout";
   if (!parsed.legs) parsed.legs = 1;
+  if (row.sport_slug === "cricket") parsed.sportSlug = "cricket";
   return {
     id: String(row.id),
     sportSlug: String(row.sport_slug),
@@ -286,6 +290,7 @@ export async function mutateTournament(
         const match = allMatches.find(item => item.id === mutation.matchId);
         if (!match || match.bye) throw new Error("Choose a playable match.");
         const previousScores = [match.scoreA, match.scoreB];
+        const previousCricketInnings = JSON.stringify(match.cricketInnings ?? {});
         if (
           mutation.date &&
           (!/^\d{4}-\d{2}-\d{2}$/.test(mutation.date) ||
@@ -335,6 +340,38 @@ export async function mutateTournament(
           if (p[0] && mutation.scores[p[0]] !== undefined) match.scoreA = mutation.scores[p[0]];
           if (p[1] && mutation.scores[p[1]] !== undefined) match.scoreB = mutation.scores[p[1]];
         }
+        if (mutation.cricketScores !== undefined) {
+          if (row.sport_slug !== "cricket") throw new Error("Cricket innings can only be saved for cricket matches.");
+          const participantIds = getMatchParticipants(match);
+          if (participantIds.length !== 2 || Object.keys(mutation.cricketScores).length !== 2 ||
+              Object.keys(mutation.cricketScores).some(id => !participantIds.includes(id))) {
+            throw new Error("Enter scores for both teams in this cricket match.");
+          }
+          const innings: Record<string, CricketInnings> = {};
+          const runs: Record<string, string> = {};
+          for (const id of participantIds) {
+            const input = mutation.cricketScores[id];
+            const parsed = /^(\d{1,3})(?:[/-](\d{1,2}))?$/.exec(input.score.trim());
+            if (!input.score.trim()) {
+              if (input.overs.trim() || input.allOut) throw new Error("Clear overs and all-out when clearing a cricket score.");
+              runs[id] = "";
+              continue;
+            }
+            if (!parsed) throw new Error("Enter cricket scores as runs/wickets, for example 91/3 or 91-3.");
+            const wickets = parsed[2] === undefined ? null : Number(parsed[2]);
+            if (wickets !== null && wickets > 10) throw new Error("Wickets must be between 0 and 10.");
+            const balls = parseCricketOvers(input.overs.trim());
+            if (balls === null) throw new Error("Enter overs from 0.1 to 8.0; the digit after the dot is balls (0–5).");
+            if (input.allOut && wickets === null) throw new Error("Enter wickets before marking an innings all out.");
+            innings[id] = { wickets, balls, allOut: input.allOut || wickets === 10 };
+            runs[id] = parsed[1];
+          }
+          if (Object.values(runs).some(Boolean) && !isMatchReady(match)) throw new Error("Wait for both teams before entering scores.");
+          match.scoreA = runs[participantIds[0]];
+          match.scoreB = runs[participantIds[1]];
+          match.scores = { ...(match.scores ?? {}), ...runs };
+          match.cricketInnings = innings;
+        }
         if (mutation.participants) {
           if (bracket.roundConfig) throw new Error("Participants in configured rounds come from the tournament draw.");
           match.participants = mutation.participants;
@@ -344,6 +381,7 @@ export async function mutateTournament(
         const groupMatch = bracket.groupStageRounds?.flat().some(item => item.id === match.id);
         if (bracket.format === "round_robin" || groupMatch) {
           const scoresChanged = previousScores[0] !== match.scoreA || previousScores[1] !== match.scoreB;
+          const inningsChanged = previousCricketInnings !== JSON.stringify(match.cricketInnings ?? {});
           if (scoresChanged && match.scoreA !== "" && match.scoreB !== "") {
             match.winner = Number(match.scoreA) === Number(match.scoreB) ? "draw" : Number(match.scoreA) > Number(match.scoreB) ? match.a : match.b;
             match.completedAt = Date.now();
@@ -351,7 +389,7 @@ export async function mutateTournament(
             match.winner = null;
             match.completedAt = null;
           }
-          if (groupMatch && scoresChanged) bracket = refreshGroupQualification(bracket, match);
+          if (groupMatch && (scoresChanged || inningsChanged)) bracket = refreshGroupQualification(bracket, match);
         }
         break;
       }
