@@ -23,12 +23,17 @@ export async function tournamentDatabase() {
   return db;
 }
 
-export const getTournamentData = cache(async () => {
+export const getTournamentRecords = cache(async () => {
   const db = await tournamentDatabase();
   const [tournaments, dynamicSports] = await Promise.all([
     listTournaments(db),
     listSports(db),
   ]);
+  return { tournaments, sports: dynamicSports };
+});
+
+export const getTournamentData = cache(async () => {
+  const { tournaments, sports: dynamicSports } = await getTournamentRecords();
 
   const activeCatalog: Sport[] = dynamicSports;
   const matches: Match[] = [];

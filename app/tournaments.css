@@ -2943,3 +2943,9 @@ button.rr-team-row:disabled { cursor: default; opacity: 1; }
   }
 }
 
+
+/* Keep touch form text readable and prevent iOS focus zoom. */
+@media (max-width: 620px) {
+  .organizer-form input, .organizer-form select, .organizer-form textarea,
+  .admin-card input, .tb-field input { font-size: 16px; }
+}

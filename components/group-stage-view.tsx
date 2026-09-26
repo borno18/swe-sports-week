@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { tournamentGroups, type BracketMatch, type Tournament } from "@/lib/bracket";
 import { RoundRobinView } from "./round-robin-view";
 
@@ -11,7 +11,7 @@ export function GroupStageView({ tournament, onWinner, onDetails, onQualifiers, 
   onQualifiers?: (groupId: string, entries: string[]) => void;
   busy?: boolean;
 }) {
-  const groups = tournamentGroups(tournament.bracket, tournament.sportSlug);
+  const groups = useMemo(() => tournamentGroups(tournament.bracket, tournament.sportSlug), [tournament.bracket, tournament.sportSlug]);
   const [active, setActive] = useState(0);
   const group = groups[Math.min(active, groups.length - 1)];
   if (!group) return null;

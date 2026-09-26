@@ -26,6 +26,7 @@ export function SiteHeader() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [searchAttempt, setSearchAttempt] = useState(0);
+  const searchLoadedAt = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -36,12 +37,13 @@ export function SiteHeader() {
 
   useEffect(() => {
     if (!searchOpen) return;
+    if (!searchError && Date.now() - searchLoadedAt.current < 30_000) return;
     const controller = new AbortController();
     setSearchLoading(true);
     setSearchError(false);
     fetch("/api/search", { signal: controller.signal, cache: "no-store" })
       .then(response => { if (!response.ok) throw new Error("Search unavailable"); return response.json(); })
-      .then((items: SearchItem[]) => { if (!controller.signal.aborted) setSearchItems(items); })
+      .then((items: SearchItem[]) => { if (!controller.signal.aborted) { setSearchItems(items); searchLoadedAt.current = Date.now(); } })
       .catch(() => { if (!controller.signal.aborted) setSearchError(true); })
       .finally(() => { if (!controller.signal.aborted) setSearchLoading(false); });
     return () => controller.abort();
@@ -137,7 +139,7 @@ export function SiteHeader() {
             }} />
             <button className="search-close" aria-label="Close search" onClick={closeSearch}><X size={18} /></button>
           </div>
-          {searchLoading ? <div className="search-empty" role="status"><p>Loading search…</p></div> : searchError ? (
+          {searchLoading && !searchItems.length ? <div className="search-empty" role="status"><p>Loading search…</p></div> : searchError ? (
             <div className="search-empty" role="status"><p>Search couldn’t load. Please try again.</p><button className="button" onClick={() => setSearchAttempt(n => n + 1)}>Retry search</button></div>
           ) : query.trim() ? (
             results.length > 0 ? (

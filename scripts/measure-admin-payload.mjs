@@ -1,0 +1,12 @@
+import {createClient} from '@libsql/client';
+import {createBracket} from '../lib/bracket.ts';
+import {listTournaments,readAdminTournaments} from '../lib/tournament-store.ts';
+const db=createClient({url:'file::memory:'});
+await db.execute('CREATE TABLE tournaments(id TEXT,sport_slug TEXT,title TEXT,entry_kind TEXT,version INTEGER,bracket TEXT)');
+const bracket=JSON.stringify(createBracket(Array.from({length:64},(_,i)=>`Player ${i+1}`).join('\n')));
+for(let i=0;i<14;i++) await db.execute({sql:'INSERT INTO tournaments VALUES(?,?,?,?,?,?)',args:[`sport${i}`,`sport${i}`,`Sport ${i}`,'player',0,bracket]});
+const oldBytes=Buffer.byteLength(JSON.stringify(await listTournaments(db)));
+const selectedBytes=Buffer.byteLength(JSON.stringify(await readAdminTournaments(db,'sport0')));
+const summaryBytes=Buffer.byteLength(JSON.stringify(await readAdminTournaments(db,undefined,false)));
+console.log(JSON.stringify({oldBytes,selectedBytes,summaryBytes,reduction:Math.round((1-selectedBytes/oldBytes)*100)}));
+db.close();

@@ -68,23 +68,16 @@ async function registerFailedAttempt(email: string, currentCount: number) {
 export async function authenticate(emailInput: string, password: string) {
   const email = emailInput.trim().toLowerCase();
   const db = await ensureDatabaseInitialized();
-  const attemptRes = await db.execute({
-    sql: "SELECT failed_count, blocked_until FROM login_attempts WHERE email = ?",
-    args: [email],
-  });
+  const [attemptRes, userRes] = await db.batch([
+    { sql: "SELECT failed_count, blocked_until FROM login_attempts WHERE email = ?", args: [email] },
+    { sql: "SELECT id, name, email, role, active, password_hash, password_salt FROM users WHERE email = ?", args: [email] },
+  ], "read");
   const attempt = attemptRes.rows[0] as unknown as { failed_count: number; blocked_until: number | null } | undefined;
 
   if (attempt?.blocked_until && Number(attempt.blocked_until) > Date.now()) {
     return { ok: false as const, reason: "locked" as const };
   }
 
-  const userRes = await db.execute({
-    sql: `
-      SELECT id, name, email, role, active, password_hash, password_salt
-      FROM users WHERE email = ?
-    `,
-    args: [email],
-  });
   const user = userRes.rows[0] as unknown as StoredUser | undefined;
 
   const valid = user && Number(user.active) === 1 && (await verifyPassword(password, String(user.password_salt), String(user.password_hash)));
@@ -94,11 +87,10 @@ export async function authenticate(emailInput: string, password: string) {
     return { ok: false as const, reason: "invalid" as const };
   }
 
-  await db.execute({
-    sql: "DELETE FROM login_attempts WHERE email = ?",
-    args: [email],
-  });
-  await recordAudit(String(user.id), "LOGIN_SUCCEEDED");
+  await db.batch([
+    { sql: "DELETE FROM login_attempts WHERE email = ?", args: [email] },
+    { sql: "INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details, created_at) VALUES (?, ?, 'LOGIN_SUCCEEDED', 'AUTH', ?, NULL, ?)", args: [randomUUID(), String(user.id), String(user.id), Date.now()] },
+  ], "write");
   return { ok: true as const, user: { id: String(user.id), name: String(user.name), email: String(user.email), role: user.role } };
 }
 

@@ -58,7 +58,7 @@ export function SportManager({
   tournaments,
 }: {
   sports: Sport[];
-  tournaments: Tournament[];
+  tournaments: Pick<Tournament, "sportSlug">[];
 }) {
   const [state, action, pending] = useActionState(saveSportAction, initial);
   const [name, setName] = useState("");

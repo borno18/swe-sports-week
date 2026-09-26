@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, type CSSProperties } from "react";
+import { useRef, useState, useEffect, useMemo, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, Trophy, Crown, Maximize2, Minimize2, Code2, Check } from "lucide-react";
 import { championOf, isMatchReady, roundName, type BracketMatch, type Tournament } from "@/lib/bracket";
 import { sports as catalog, formatMatchTime } from "@/lib/data";
@@ -25,8 +25,8 @@ export function TournamentBracket({
   const containerRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const entries = new Map(bracket.entries.map(entry => [entry.id, entry.name]));
-  const champion = championOf(bracket);
+  const entries = useMemo(() => new Map(bracket.entries.map(entry => [entry.id, entry.name])), [bracket.entries]);
+  const champion = useMemo(() => championOf(bracket), [bracket]);
   const sportObj = catalog.find(s => s.slug === tournament.sportSlug);
   const sportColor = sportObj?.color || "#72d2ff";
 
@@ -40,7 +40,7 @@ export function TournamentBracket({
   }, []);
 
   function toggleFullscreen() {
-    if (!containerRef.current) return;
+    if (!containerRef.current?.requestFullscreen) return;
     if (!document.fullscreenElement) {
       containerRef.current.requestFullscreen().catch(() => {});
     } else {
@@ -48,10 +48,15 @@ export function TournamentBracket({
     }
   }
 
-  function handleShare() {
+  async function handleShare() {
     if (typeof window !== "undefined") {
       const url = `${window.location.origin}/sports/${tournament.sportSlug}#section-${tournament.id}`;
-      navigator.clipboard?.writeText(url);
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        window.prompt("Copy this public tournament link:", url);
+        return;
+      }
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     }

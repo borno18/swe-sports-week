@@ -119,6 +119,34 @@ export async function listTournaments(db: Client): Promise<Tournament[]> {
   return (res.rows as unknown as Row[]).map(decode);
 }
 
+/** Navigation needs counts, not every section's complete draw and score history. */
+export async function readAdminTournaments(db: Client, section?: string, includeSelected = true) {
+  const summariesSql = `SELECT id, sport_slug, title,
+    COALESCE(json_array_length(bracket, '$.entries'), 0) AS entry_count,
+    COALESCE(json_array_length(bracket, '$.rounds'), 0) AS round_count,
+    COALESCE(json_extract(bracket, '$.format'), 'knockout') AS format,
+    COALESCE(json_extract(bracket, '$.hasGroupStage'), 0) AS has_groups,
+    (SELECT COUNT(*) FROM json_each(t.bracket, '$.rounds') r, json_each(r.value) m
+      WHERE COALESCE(json_extract(m.value, '$.bye'), 0) = 0 AND
+      (json_extract(m.value, '$.winner') IS NOT NULL OR json_extract(m.value, '$.completedAt') IS NOT NULL)) +
+    (SELECT COUNT(*) FROM json_each(t.bracket, '$.groupStageRounds') r, json_each(r.value) m
+      WHERE COALESCE(json_extract(m.value, '$.bye'), 0) = 0 AND
+      (json_extract(m.value, '$.winner') IS NOT NULL OR json_extract(m.value, '$.completedAt') IS NOT NULL)) AS decided
+    FROM tournaments t ORDER BY rowid`;
+  const queries = [{ sql: summariesSql, args: [] as string[] }];
+  if (includeSelected) queries.push({ sql: `SELECT * FROM tournaments WHERE id = COALESCE(
+    (SELECT id FROM tournaments WHERE id = ?), (SELECT id FROM tournaments ORDER BY rowid LIMIT 1))`, args: [section ?? ""] });
+  const results = await db.batch(queries, "read");
+  return {
+    tournaments: results[0].rows.map(row => ({
+      id: String(row.id), sportSlug: String(row.sport_slug), title: String(row.title),
+      entryCount: Number(row.entry_count), published: Number(row.round_count) > 0,
+      format: String(row.format), hasGroupStage: Boolean(row.has_groups), decided: Number(row.decided),
+    })),
+    selected: results[1]?.rows[0] ? decode(results[1].rows[0] as unknown as Row) : undefined,
+  };
+}
+
 export async function addTournament(
   db: Client,
   sportSlug: string,

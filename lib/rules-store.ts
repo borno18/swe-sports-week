@@ -50,11 +50,7 @@ export async function getSportRule(db: Pick<Client, "execute">, sportSlug: strin
 
   // Fallback to default in-memory rules
   const defaultRule = gameRules[sportSlug];
-  if (defaultRule) {
-    // Proactively save to DB
-    saveSportRule(db, defaultRule).catch(() => {});
-    return defaultRule;
-  }
+  if (defaultRule) return defaultRule;
 
   // Fallback generic rule for unknown / newly created custom sports
   return {

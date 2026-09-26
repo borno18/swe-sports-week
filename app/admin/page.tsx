@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import AdminLoading from "./loading";
+import { NavigationHint } from "@/components/navigation-hint";
 import { ArrowLeft, LogOut, ShieldCheck, Trophy, Users, CheckCircle2, GitBranch, Megaphone, Layers } from "lucide-react";
 import { loginAction, logoutAction } from "@/app/admin/actions";
 import { getCurrentAdmin } from "@/lib/auth";
@@ -6,7 +9,9 @@ import { SubmitButton } from "@/components/submit-button";
 import { TournamentEditor, NewSectionForm } from "@/components/tournament-editor";
 import { AnnouncementManager } from "@/components/announcement-manager";
 import { SportManager } from "@/components/sport-manager";
-import { getTournamentData } from "@/lib/tournaments";
+import { tournamentDatabase } from "@/lib/tournaments";
+import { readAdminTournaments } from "@/lib/tournament-store";
+import { listSports } from "@/lib/sports-store";
 import { getAnnouncements } from "@/lib/announcements";
 import { championOf } from "@/lib/bracket";
 import { ensureDatabaseInitialized } from "@/lib/db";
@@ -44,21 +49,29 @@ function LoginForm({ error }: { error?: string }) {
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
-  const [user, params, tournamentData, announcements] = await Promise.all([
+  const [user, params] = await Promise.all([
     getCurrentAdmin(),
     searchParams,
-    getTournamentData(),
-    getAnnouncements(),
   ]);
   if (!user) return <LoginForm error={params.error} />;
+  return <Suspense key={`${params.tab ?? "tournaments"}:${params.section ?? ""}`} fallback={<AdminLoading />}><Dashboard user={user} params={params} /></Suspense>;
+}
 
-  const { tournaments, sports, matches } = tournamentData;
-  const selected = tournaments.find(t => t.id === params.section) ?? tournaments[0];
-  const published = tournaments.filter(t => t.bracket.rounds.length);
+async function Dashboard({ user, params }: { user: NonNullable<Awaited<ReturnType<typeof getCurrentAdmin>>>; params: Awaited<AdminPageProps["searchParams"]> }) {
+  const db = await tournamentDatabase();
+  const [tournamentData, sports, notices] = await Promise.all([
+    readAdminTournaments(db, params.section, params.tab !== "announcements" && params.tab !== "segments"),
+    listSports(db),
+    params.tab === "announcements"
+      ? getAnnouncements().then(items => ({ items, count: items.length }))
+      : ensureDatabaseInitialized().then(db => db.execute("SELECT COUNT(*) AS count FROM announcements")).then(result => ({ items: [], count: Number(result.rows[0].count) })),
+  ]);
+  const announcements = notices.items;
+  const { tournaments, selected } = tournamentData;
+  const decidedMatches = tournaments.reduce((total, t) => total + t.decided, 0);
+  const published = tournaments.filter(t => t.published);
   const canEditLineup = user.role !== "RESULT_MANAGER";
 
-  const db = await ensureDatabaseInitialized();
-  const rule = selected ? await getSportRule(db, selected.sportSlug) : null;
 
   const activeTab =
     params.tab === "announcements"
@@ -87,7 +100,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         </article>
         <article>
           <span><Users /></span>
-          <div><b>{tournaments.reduce((sum, t) => sum + t.bracket.entries.length, 0)}</b><small>Players / teams</small></div>
+          <div><b>{tournaments.reduce((sum, t) => sum + t.entryCount, 0)}</b><small>Players / teams</small></div>
         </article>
         <Link href="/admin?tab=segments" className="stat-card-link">
           <article className={activeTab === "segments" ? "stat-active" : ""}>
@@ -97,12 +110,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         </Link>
         <article>
           <span><CheckCircle2 /></span>
-          <div><b>{matches.filter(m => m.status === "completed").length}</b><small>Decided matches</small></div>
+          <div><b>{decidedMatches}</b><small>Decided matches</small></div>
         </article>
         <Link href="/admin?tab=announcements" className="stat-card-link">
           <article className={activeTab === "announcements" ? "stat-active" : ""}>
             <span><Megaphone /></span>
-            <div><b>{announcements.length}</b><small>Active notices</small></div>
+            <div><b>{notices.count}</b><small>Active notices</small></div>
           </article>
         </Link>
       </section>
@@ -114,6 +127,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           aria-current={activeTab === "tournaments" ? "page" : undefined}
         >
           <GitBranch size={16} /> Tournaments &amp; Brackets
+          <NavigationHint />
         </Link>
         <Link
           href="/admin?tab=segments"
@@ -121,6 +135,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           aria-current={activeTab === "segments" ? "page" : undefined}
         >
           <Layers size={16} /> Game Segments
+          <NavigationHint />
           <span className="admin-tab-badge">{sports.length}</span>
         </Link>
         <Link
@@ -129,14 +144,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           aria-current={activeTab === "announcements" ? "page" : undefined}
         >
           <Megaphone size={16} /> Announcements &amp; Bulletins
-          <span className="admin-tab-badge">{announcements.length}</span>
+          <NavigationHint />
+          <span className="admin-tab-badge">{notices.count}</span>
         </Link>
       </nav>
 
       {activeTab === "announcements" ? (
         <AnnouncementManager announcements={announcements} />
       ) : activeTab === "segments" ? (
-        <SportManager sports={sports} tournaments={tournaments} />
+        <SportManager sports={sports} tournaments={tournaments.map(({ sportSlug }) => ({ sportSlug }))} />
       ) : (
         <div className="organizer-workspace">
           <aside className="section-sidebar">
@@ -154,8 +170,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   aria-current={selected?.id === t.id ? "page" : undefined}
                 >
                   <strong>{t.title}</strong>
+                  <NavigationHint />
                   <small>
-                    {t.bracket.hasGroupStage ? "Groups + Knockout" : t.bracket.format === "round_robin" ? "League" : "Knockout"} · {t.bracket.entries.length} entries
+                    {t.hasGroupStage ? "Groups + Knockout" : t.format === "round_robin" ? "League" : "Knockout"} · {t.entryCount} entries
                   </small>
                 </Link>
               ))}
@@ -163,7 +180,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             {canEditLineup && <NewSectionForm sports={sports} />}
           </aside>
           {selected ? (
-            <TournamentEditor key={selected.id} tournament={selected} canEditLineup={canEditLineup} rule={rule} />
+            <Suspense key={selected.id} fallback={<AdminLoading />}><Editor tournament={selected} canEditLineup={canEditLineup} /></Suspense>
           ) : (
             <div className="empty-state">
               <h3>No sections created yet</h3>
@@ -174,4 +191,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       )}
     </div>
   );
+}
+
+async function Editor({ tournament, canEditLineup }: Parameters<typeof TournamentEditor>[0]) {
+  const rule = await getSportRule(await ensureDatabaseInitialized(), tournament.sportSlug);
+  return <TournamentEditor key={tournament.id} tournament={tournament} canEditLineup={canEditLineup} rule={rule} />;
 }

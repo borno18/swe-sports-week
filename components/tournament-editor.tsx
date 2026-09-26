@@ -2,12 +2,11 @@
 
 import { useActionState, useEffect, useRef, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { saveTournament, type ActionResult } from "@/app/admin/tournament-actions";
 import { TournamentBracket } from "@/components/tournament-bracket";
 import { RoundRobinView } from "@/components/round-robin-view";
-import { FlexibleBracketView } from "@/components/flexible-bracket-view";
 import { GameRulesCard } from "@/components/game-rules-card";
-import { GroupStageView } from "@/components/group-stage-view";
 import {
   roundName,
   defaultRoundName,
@@ -24,6 +23,8 @@ import type { Sport, GameRule } from "@/lib/data";
 import { Plus, Trash2, UserPlus, Users, X, ChevronDown, ChevronUp, Layers, Swords, Hash } from "lucide-react";
 
 const initial: ActionResult = { ok: false, message: "" };
+const FlexibleBracketView = dynamic(() => import("@/components/flexible-bracket-view").then(module => module.FlexibleBracketView));
+const GroupStageView = dynamic(() => import("@/components/group-stage-view").then(module => module.GroupStageView));
 
 function LineupNames({ names, onCountChange }: { names: string; onCountChange?: (count: number) => void }) {
   const [value, setValue] = useState(names);

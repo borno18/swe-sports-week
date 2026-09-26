@@ -6,6 +6,9 @@ import { initializeTournaments } from "./tournament-store.ts";
 /** Seed a new database once without restoring sections an organizer deleted. */
 export async function initializeCatalog(db: Client, catalog: Sport[]) {
   await db.execute("CREATE TABLE IF NOT EXISTS app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  // Warm databases need no write transaction. Recheck inside the transaction for concurrent first boots.
+  const marker = await db.execute("SELECT value FROM app_metadata WHERE key = 'catalog_seeded'");
+  if (marker.rows.length) return;
   const tx = await db.transaction("write");
   try {
     const seeded = await tx.execute("SELECT value FROM app_metadata WHERE key = 'catalog_seeded'");
