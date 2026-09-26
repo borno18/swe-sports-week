@@ -7,18 +7,25 @@ export function SiteFooter() {
         <div className="footer-top">
           <div className="footer-org-showcase">
             {/* Prioritized SWE Society */}
-            <div className="footer-society-block">
+            <a
+              href="https://www.facebook.com/swesociety.sust"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="footer-society-block"
+              title="Visit SWE Society on Facebook"
+              style={{ textDecoration: "none", color: "inherit" }}
+            >
               <img
                 src="/logos/swe-society-logo-white.png"
                 alt="SWE Society"
                 className="footer-society-logo"
               />
               <div className="footer-society-desc">
-                <strong>Software Engineering Society</strong>
-                <p>Department of Software Engineering</p>
-                <small>Official Organizing Body · Intra SWE Sports Week 2026</small>
+                <strong>Software Engineering Society ↗</strong>
+                <p>Department of Software Engineering, SUST</p>
+                <small>Official Organizing Body · SWE Sports Week 2026</small>
               </div>
-            </div>
+            </a>
 
             <div className="footer-v-line" aria-hidden="true" />
 
@@ -47,6 +54,13 @@ export function SiteFooter() {
               <Link href="/results">Results & Outcomes</Link>
               <Link href="/champions">Hall of Champions</Link>
               <Link href="/announcements">Notices & Bulletins</Link>
+              <a
+                href="https://www.facebook.com/swesociety.sust"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                SWE Society Facebook ↗
+              </a>
               <Link href="/admin">Admin Portal</Link>
             </div>
           </div>
