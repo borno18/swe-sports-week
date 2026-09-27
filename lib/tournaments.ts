@@ -1,159 +1,161 @@
-import "server-only";
-import { cache } from "react";
-import { ensureDatabaseInitialized } from "@/lib/db";
-import { sports as catalog, eventDays, type Match, type Champion, type Sport } from "@/lib/data";
-import { championOf, formatCricketScore, roundName } from "@/lib/bracket";
-import { listTournaments } from "@/lib/tournament-store";
-import { listSports } from "@/lib/sports-store";
-import { initializeCatalog } from "@/lib/catalog-store";
-
-declare global {
-  var sportsWeekCatalogInitPromise: Promise<void> | undefined;
-}
-
-export async function tournamentDatabase() {
-  const db = await ensureDatabaseInitialized();
-  if (!global.sportsWeekCatalogInitPromise) {
-    global.sportsWeekCatalogInitPromise = initializeCatalog(db, catalog).catch(error => {
-      global.sportsWeekCatalogInitPromise = undefined;
-      throw error;
-    });
-  }
-  await global.sportsWeekCatalogInitPromise;
-  return db;
-}
-
-export const getTournamentRecords = cache(async () => {
-  const db = await tournamentDatabase();
-  const [tournaments, dynamicSports] = await Promise.all([
-    listTournaments(db),
-    listSports(db),
-  ]);
-  return { tournaments, sports: dynamicSports };
-});
-
-export const getTournamentData = cache(async () => {
-  const { tournaments, sports: dynamicSports } = await getTournamentRecords();
-
-  const activeCatalog: Sport[] = dynamicSports;
-  const matches: Match[] = [];
-  const champions: Champion[] = [];
-  const completedSections = new Set<string>();
-
-  for (const tournament of tournaments) {
-    const sport = activeCatalog.find(item => item.slug === tournament.sportSlug) || {
-      slug: tournament.sportSlug,
-      name: tournament.title,
-      icon: "🏆",
-      category: "Indoor" as const,
-      color: "#72d2ff",
-      detail: "",
-      participants: 0,
-      matches: 0,
-      stage: "",
-    };
-
-    const names = new Map(tournament.bracket.entries.map(entry => [entry.id, entry.name]));
-    const format = tournament.bracket.format || "knockout";
-
-    for (const match of [...(tournament.bracket.groupStageRounds?.flat() ?? []), ...tournament.bracket.rounds.flat()]) {
-      if (match.bye) continue;
-      const groupNumber = match.groupId?.slice(1) ?? match.id.match(/^gs_g(\d+)r/)?.[1];
-      const roundLabel = groupNumber ? `Group ${String.fromCharCode(64 + Number(groupNumber))} · Round ${match.round + 1}` : roundName(match.round, tournament.bracket.rounds.length, format, tournament.bracket.roundConfig);
-
-      // Flexible format: multi-player matches
-      if (format === "flexible" || (match.participants?.length ?? 0) > 2) {
-        const participants = match.participants ?? [];
-        const advancers = match.advancers ?? [];
-        if (participants.length === 0) continue;
-        const participantNames = participants.map(id => names.get(id) ?? "Unknown").join(", ");
-        const advancerCount = advancers.length;
-        matches.push({
-          id: `${tournament.id}-${match.id}`,
-          sport: sport.name,
-          sportSlug: sport.slug,
-          tournamentId: tournament.id,
-          icon: sport.icon,
-          category: tournament.title,
-          round: roundLabel,
-          participantA: `${participants.length} players`,
-          participantB: participantNames,
-          scoreA: "",
-          scoreB: "",
-          status: match.completedAt || match.winner ? "completed" : "upcoming",
-          date: match.date,
-          time: match.time || "Time TBD",
-          venue: match.venue || "Venue TBD",
-          day: eventDays.findIndex(day => day.date === match.date) + 1,
-          completedAt: match.completedAt,
-          winner: match.winner ? names.get(match.winner) : advancerCount > 0 ? `${advancerCount} advanced` : undefined,
-        });
-        continue;
-      }
-
-      let scoreDisplayA = sport.slug === "cricket" ? formatCricketScore(match, match.a) : match.scoreA;
-      let scoreDisplayB = sport.slug === "cricket" ? formatCricketScore(match, match.b) : match.scoreB;
-      if (match.legs === 2 && (match.scoreA2 || match.scoreB2)) {
-        const aggA = (Number(match.scoreA) || 0) + (Number(match.scoreA2) || 0);
-        const aggB = (Number(match.scoreB) || 0) + (Number(match.scoreB2) || 0);
-        scoreDisplayA = `${match.scoreA || "0"}+${match.scoreA2 || "0"} (${aggA})`;
-        scoreDisplayB = `${match.scoreB || "0"}+${match.scoreB2 || "0"} (${aggB})`;
-      }
-
-      matches.push({
-        id: `${tournament.id}-${match.id}`,
-        sport: sport.name,
-        sportSlug: sport.slug,
-        tournamentId: tournament.id,
-        icon: sport.icon,
-        category: tournament.title,
-        round: roundLabel,
-        participantA: names.get(match.a ?? "") ?? (format === "round_robin" ? "Team A" : "Awaiting winner"),
-        participantB: names.get(match.b ?? "") ?? (format === "round_robin" ? "Team B" : "Awaiting winner"),
-        scoreA: scoreDisplayA,
-        scoreB: scoreDisplayB,
-        status: match.winner ? "completed" : "upcoming",
-        date: match.date,
-        time: match.time || "Time TBD",
-        venue: match.venue || "Venue TBD",
-        day: eventDays.findIndex(day => day.date === match.date) + 1,
-        completedAt: match.completedAt,
-        winner: match.winner === "draw" ? "Draw" : names.get(match.winner ?? ""),
-      });
-    }
-
-    const champion = championOf(tournament.bracket);
-    if (champion) {
-      completedSections.add(tournament.id);
-      champions.push({
-        sport: tournament.title,
-        icon: sport.icon,
-        winner: champion.winner.name,
-        runnerUp: champion.runnerUp.name,
-        batch: sport.name,
-      });
-    }
-  }
-
-  const sports = activeCatalog.map(sport => {
-    const sections = tournaments.filter(t => t.sportSlug === sport.slug);
-    const published = sections.filter(t => t.bracket.rounds.length);
-    const hasRoundRobin = sections.some(t => t.bracket.format === "round_robin" || t.bracket.hasGroupStage);
-    const hasFlexible = sections.some(t => t.bracket.format === "flexible");
-    const formatLabel = hasRoundRobin ? "Group / League" : hasFlexible ? "Flexible Knockout" : "Knockout";
-
-    return {
-      ...sport,
-      participants: sections.reduce((sum, t) => sum + t.bracket.entries.length, 0),
-      matches: matches.filter(m => m.sportSlug === sport.slug).length,
-      detail: `${sections.length} ${sections.length === 1 ? "section" : "sections"} · ${formatLabel}`,
-      stage: !published.length
-        ? "Awaiting entries"
-        : published.every(t => completedSections.has(t.id))
-          ? "Completed"
-          : "In progress",
-    };
-  });
-
-  return { tournaments, sports, matches, champions };
-});
+import "server-only";
+import { cache } from "react";
+import { ensureDatabaseInitialized } from "@/lib/db";
+import { sports as catalog, eventDays, type Match, type Champion, type Sport } from "@/lib/data";
+import { championOf, formatCricketScore, roundName } from "@/lib/bracket";
+import { listTournaments } from "@/lib/tournament-store";
+import { listSports } from "@/lib/sports-store";
+import { initializeCatalog } from "@/lib/catalog-store";
+
+declare global {
+  var sportsWeekCatalogInitPromise: Promise<void> | undefined;
+}
+
+export async function tournamentDatabase() {
+  const db = await ensureDatabaseInitialized();
+  if (!global.sportsWeekCatalogInitPromise) {
+    global.sportsWeekCatalogInitPromise = initializeCatalog(db, catalog).catch(error => {
+      global.sportsWeekCatalogInitPromise = undefined;
+      throw error;
+    });
+  }
+  await global.sportsWeekCatalogInitPromise;
+  return db;
+}
+
+export const getTournamentRecords = cache(async () => {
+  const db = await tournamentDatabase();
+  const [tournaments, dynamicSports] = await Promise.all([
+    listTournaments(db),
+    listSports(db),
+  ]);
+  return { tournaments, sports: dynamicSports };
+});
+
+export const getTournamentData = cache(async () => {
+  const { tournaments, sports: dynamicSports } = await getTournamentRecords();
+
+  const activeCatalog: Sport[] = dynamicSports;
+  const matches: Match[] = [];
+  const champions: Champion[] = [];
+  const completedSections = new Set<string>();
+
+  for (const tournament of tournaments) {
+    const sport = activeCatalog.find(item => item.slug === tournament.sportSlug) || {
+      slug: tournament.sportSlug,
+      name: tournament.title,
+      icon: "🏆",
+      category: "Indoor" as const,
+      color: "#72d2ff",
+      detail: "",
+      participants: 0,
+      matches: 0,
+      stage: "",
+    };
+
+    const names = new Map(tournament.bracket.entries.map(entry => [entry.id, entry.name]));
+    const format = tournament.bracket.format || "knockout";
+
+    for (const match of [...(tournament.bracket.groupStageRounds?.flat() ?? []), ...tournament.bracket.rounds.flat()]) {
+      if (match.bye) continue;
+      const groupNumber = match.groupId?.slice(1) ?? match.id.match(/^gs_g(\d+)r/)?.[1];
+      const roundLabel = groupNumber ? `Group ${String.fromCharCode(64 + Number(groupNumber))} · Round ${match.round + 1}` : roundName(match.round, tournament.bracket.rounds.length, format, tournament.bracket.roundConfig);
+
+      // Flexible format: multi-player or custom matches
+      if (format === "flexible" || (match.participants?.length ?? 0) > 2) {
+        const participants = match.participants ?? [];
+        const advancers = match.advancers ?? [];
+        if (participants.length === 0) continue;
+        const participantNames = participants.map(id => names.get(id) ?? "Unknown").join(", ");
+        const advancerNames = advancers.map(id => names.get(id) ?? "Unknown").join(", ");
+        const isHeadToHead = participants.length === 2;
+        const isCompleted = Boolean(match.completedAt || match.winner || advancers.length > 0);
+        matches.push({
+          id: `${tournament.id}-${match.id}`,
+          sport: sport.name,
+          sportSlug: sport.slug,
+          tournamentId: tournament.id,
+          icon: sport.icon,
+          category: tournament.title,
+          round: roundLabel,
+          participantA: isHeadToHead ? (names.get(participants[0]) ?? "Unknown") : `${participants.length} players`,
+          participantB: isHeadToHead ? (names.get(participants[1]) ?? "Unknown") : participantNames,
+          scoreA: isHeadToHead && (match.winner === participants[0] || (advancers.length === 1 && advancers[0] === participants[0])) ? "Winner" : "",
+          scoreB: isHeadToHead && (match.winner === participants[1] || (advancers.length === 1 && advancers[1] === participants[1])) ? "Winner" : "",
+          status: isCompleted ? "completed" : "upcoming",
+          date: match.date,
+          time: match.time || "Time TBD",
+          venue: match.venue || "Venue TBD",
+          day: eventDays.findIndex(day => day.date === match.date) + 1,
+          completedAt: match.completedAt,
+          winner: match.winner ? names.get(match.winner) : advancers.length === 1 ? names.get(advancers[0]) : advancers.length > 1 ? advancerNames : undefined,
+        });
+        continue;
+      }
+
+      let scoreDisplayA = sport.slug === "cricket" ? formatCricketScore(match, match.a) : match.scoreA;
+      let scoreDisplayB = sport.slug === "cricket" ? formatCricketScore(match, match.b) : match.scoreB;
+      if (match.legs === 2 && (match.scoreA2 || match.scoreB2)) {
+        const aggA = (Number(match.scoreA) || 0) + (Number(match.scoreA2) || 0);
+        const aggB = (Number(match.scoreB) || 0) + (Number(match.scoreB2) || 0);
+        scoreDisplayA = `${match.scoreA || "0"}+${match.scoreA2 || "0"} (${aggA})`;
+        scoreDisplayB = `${match.scoreB || "0"}+${match.scoreB2 || "0"} (${aggB})`;
+      }
+
+      matches.push({
+        id: `${tournament.id}-${match.id}`,
+        sport: sport.name,
+        sportSlug: sport.slug,
+        tournamentId: tournament.id,
+        icon: sport.icon,
+        category: tournament.title,
+        round: roundLabel,
+        participantA: names.get(match.a ?? "") ?? (format === "round_robin" ? "Team A" : "Awaiting winner"),
+        participantB: names.get(match.b ?? "") ?? (format === "round_robin" ? "Team B" : "Awaiting winner"),
+        scoreA: scoreDisplayA,
+        scoreB: scoreDisplayB,
+        status: match.winner ? "completed" : "upcoming",
+        date: match.date,
+        time: match.time || "Time TBD",
+        venue: match.venue || "Venue TBD",
+        day: eventDays.findIndex(day => day.date === match.date) + 1,
+        completedAt: match.completedAt,
+        winner: match.winner === "draw" ? "Draw" : names.get(match.winner ?? ""),
+      });
+    }
+
+    const champion = championOf(tournament.bracket);
+    if (champion) {
+      completedSections.add(tournament.id);
+      champions.push({
+        sport: tournament.title,
+        icon: sport.icon,
+        winner: champion.winner.name,
+        runnerUp: champion.runnerUp.name,
+        batch: sport.name,
+      });
+    }
+  }
+
+  const sports = activeCatalog.map(sport => {
+    const sections = tournaments.filter(t => t.sportSlug === sport.slug);
+    const published = sections.filter(t => t.bracket.rounds.length);
+    const hasRoundRobin = sections.some(t => t.bracket.format === "round_robin" || t.bracket.hasGroupStage);
+    const hasFlexible = sections.some(t => t.bracket.format === "flexible");
+    const formatLabel = hasRoundRobin ? "Group / League" : hasFlexible ? "Flexible Knockout" : "Knockout";
+
+    return {
+      ...sport,
+      participants: sections.reduce((sum, t) => sum + t.bracket.entries.length, 0),
+      matches: matches.filter(m => m.sportSlug === sport.slug).length,
+      detail: `${sections.length} ${sections.length === 1 ? "section" : "sections"} · ${formatLabel}`,
+      stage: !published.length
+        ? "Awaiting entries"
+        : published.every(t => completedSections.has(t.id))
+          ? "Completed"
+          : "In progress",
+    };
+  });
+
+  return { tournaments, sports, matches, champions };
+});
