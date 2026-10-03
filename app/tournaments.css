@@ -1816,10 +1816,22 @@ button.flex-player:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--sport-color, #72d2ff) 50%, #18543c);
   color: #18543c; font-weight: 700;
 }
+.flex-player.runner-up {
+  background: color-mix(in srgb, var(--sport-color, #72d2ff) 15%, #eef2ff);
+  border-color: color-mix(in srgb, var(--sport-color, #72d2ff) 40%, #4338ca);
+  color: #312e81; font-weight: 700;
+}
 .flex-player.eliminated {
   background: #fce4e7; border-color: #e8a0aa;
   color: #881b2b; opacity: .7;
   text-decoration: line-through;
+}
+.flex-player-info {
+  display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; text-align: left;
+}
+.flex-player-score {
+  font-size: 11px; font-weight: 600; opacity: 0.88; line-height: 1.25;
+  white-space: normal; text-decoration: none !important;
 }
 .flex-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .flex-player-badge { flex-shrink: 0; font-size: 12px; font-weight: 800; margin-left: 6px; }
@@ -1970,6 +1982,12 @@ button.flex-player:hover:not(:disabled) {
   background: color-mix(in srgb, var(--sport-color, #72d2ff) 24%, #ddf6e8);
   border-color: color-mix(in srgb, var(--sport-color, #72d2ff) 60%, #0d5f34);
   color: #0d5f34;
+}
+.flex-bracket.dark-theme .flex-player.runner-up,
+.flex-bracket .flex-player.runner-up {
+  background: color-mix(in srgb, var(--sport-color, #72d2ff) 20%, #eef2ff);
+  border-color: color-mix(in srgb, var(--sport-color, #72d2ff) 50%, #4338ca);
+  color: #312e81;
 }
 .flex-bracket.dark-theme .flex-player.eliminated,
 .flex-bracket .flex-player.eliminated {

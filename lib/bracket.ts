@@ -844,13 +844,15 @@ export function championOf(bracket: Bracket) {
     const lastRound = bracket.rounds.at(-1);
     if (!lastRound || lastRound.length === 0) return null;
     const allAdvancers = lastRound.flatMap(m => m.advancers ?? []);
+    const uniqueAdvancers = [...new Set(allAdvancers)];
     const allComplete = lastRound.every(m => m.completedAt);
-    if (allComplete && allAdvancers.length === 1) {
-      const winnerId = allAdvancers[0];
-      // Find runner-up: last eliminated players from the final round
+    if (allComplete && (allAdvancers.length === 1 || uniqueAdvancers.length === 1)) {
+      const winnerId = uniqueAdvancers[0];
+      // Find runner-up: last eliminated players from the final round or explicit match properties
       const finalParticipants = lastRound.flatMap(m => m.participants ?? []);
       const eliminated = finalParticipants.filter(id => id !== winnerId);
-      const runnerUpId = eliminated[0] ?? winnerId;
+      const explicitRunnerUp = (lastRound[0] as any)?.runnerUp || (lastRound[0]?.a === winnerId ? lastRound[0]?.b : lastRound[0]?.b === winnerId ? lastRound[0]?.a : null);
+      const runnerUpId = explicitRunnerUp || (eliminated[0] ?? winnerId);
       return {
         winner: bracket.entries.find(e => e.id === winnerId)!,
         runnerUp: bracket.entries.find(e => e.id === runnerUpId)!,

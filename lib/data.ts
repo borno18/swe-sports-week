@@ -80,7 +80,7 @@ export const sports: Sport[] = [
   { slug: "29", name: "29", icon: "♠️", category: "Indoor", color: "#ff8f9b", detail: "10-Round team matches · Room 830, IICT", participants: 20, matches: 5, stage: "Round 1" },
   { slug: "big-two", name: "Big-2", icon: "♥️", category: "Indoor", color: "#f43f5e", detail: "8-Round lowest-scorer advances", participants: 0, matches: 0, stage: "Registration" },
   { slug: "uno", name: "UNO", icon: "🃏", category: "Indoor", color: "#f59eba", detail: "Top 3 advance per group match · Round 2 Next", participants: 30, matches: 3, stage: "Round 2" },
-  { slug: "mini-militia", name: "Mini Militia", icon: "🎮", category: "Indoor", color: "#b8c5fa", detail: "8 players max · 2 advance", participants: 0, matches: 0, stage: "Registration" },
+  { slug: "mini-militia", name: "Mini Militia", icon: "🎮", category: "Indoor", color: "#b8c5fa", detail: "🏆 Champion: OMOR FARUK MAHER (Wathor) · 🥈 Runner-Up: Joydip Majumdar Borno (nightguy)", participants: 14, matches: 4, stage: "Completed" },
   { slug: "dart", name: "Dart", icon: "🎯", category: "Indoor", color: "#ffb59d", detail: "8 groups · 3 per group · Project 350", participants: 0, matches: 0, stage: "Registration" },
   { slug: "pen-fight", name: "Pen Fight", icon: "✒", category: "Indoor", color: "#dfbf92", detail: "1 winner per group to final", participants: 0, matches: 0, stage: "Registration" },
   { slug: "ludo", name: "Ludo", icon: "🎲", category: "Indoor", color: "#70e6cd", detail: "Open knockout · 5 Duos Advance to Round 2", participants: 20, matches: 5, stage: "Round 2" },

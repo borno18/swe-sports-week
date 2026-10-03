@@ -437,12 +437,19 @@ function FlexMatchCard({
           const name = entries.get(id) ?? id;
           const isAdv = editable ? localAdvancers.has(id) : advancers.has(id);
           const isEliminated = isComplete && !advancers.has(id);
+          const scoreText = match.scores?.[id];
+          const isWinner = isComplete && (match.winner === id || (advancers.size === 1 && advancers.has(id)));
+          const isRunnerUp = !isWinner && isComplete && (
+            (match as any).runnerUp === id ||
+            (match.b === id && match.winner === match.a) ||
+            Boolean(scoreText && (scoreText.toLowerCase().includes("runner-up") || scoreText.toLowerCase().includes("2nd")))
+          );
 
           return editable ? (
             <button
               key={id}
               type="button"
-              className={`flex-player${isAdv ? " advanced" : ""}${isEliminated ? " eliminated" : ""}`}
+              className={`flex-player${isAdv ? " advanced" : ""}${isRunnerUp ? " runner-up" : ""}${isEliminated && !isRunnerUp ? " eliminated" : ""}`}
               disabled={saving}
               onClick={() => {
                 setLocalAdvancers((prev) => {
@@ -457,20 +464,34 @@ function FlexMatchCard({
                   : `${name} — click to mark as advancing`
               }
             >
-              <span className="flex-player-name">{name}</span>
-              {isAdv && <span className="flex-player-badge">✓</span>}
-              {isEliminated && (
+              <div className="flex-player-info">
+                <span className="flex-player-name">{name}</span>
+                {scoreText && (
+                  <span className="flex-player-score">{scoreText}</span>
+                )}
+              </div>
+              {isWinner && <span className="flex-player-badge win">🏆</span>}
+              {isRunnerUp && <span className="flex-player-badge runner">🥈</span>}
+              {!isWinner && !isRunnerUp && isAdv && <span className="flex-player-badge">✓</span>}
+              {!isWinner && !isRunnerUp && isEliminated && (
                 <span className="flex-player-badge elim">✗</span>
               )}
             </button>
           ) : (
             <div
               key={id}
-              className={`flex-player${isAdv ? " advanced" : ""}${isEliminated ? " eliminated" : ""}`}
+              className={`flex-player${isAdv ? " advanced" : ""}${isRunnerUp ? " runner-up" : ""}${isEliminated && !isRunnerUp ? " eliminated" : ""}`}
             >
-              <span className="flex-player-name">{name}</span>
-              {isAdv && <span className="flex-player-badge">✓</span>}
-              {isEliminated && (
+              <div className="flex-player-info">
+                <span className="flex-player-name">{name}</span>
+                {scoreText && (
+                  <span className="flex-player-score">{scoreText}</span>
+                )}
+              </div>
+              {isWinner && <span className="flex-player-badge win">🏆</span>}
+              {isRunnerUp && <span className="flex-player-badge runner">🥈</span>}
+              {!isWinner && !isRunnerUp && isAdv && <span className="flex-player-badge">✓</span>}
+              {!isWinner && !isRunnerUp && isEliminated && (
                 <span className="flex-player-badge elim">✗</span>
               )}
             </div>
