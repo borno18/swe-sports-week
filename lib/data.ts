@@ -75,7 +75,7 @@ export const sports: Sport[] = [
   { slug: "chess", name: "Chess", icon: "♟", category: "Indoor", color: "#d6b3ff", detail: "Single elimination", participants: 32, matches: 31, stage: "Semi Finals" },
   { slug: "table-tennis", name: "Table Tennis", icon: "🏓", category: "Indoor", color: "#ff8f9b", detail: "Singles & doubles", participants: 38, matches: 34, stage: "Round of 16" },
   { slug: "fifa", name: "E-Football Mobile / FIFA", icon: "🎮", category: "Indoor", color: "#9ea9ff", detail: "1v1 Knockout tournament", participants: 32, matches: 31, stage: "Quarter Finals" },
-  { slug: "carrom", name: "Carrom", icon: "◉", category: "Indoor", color: "#f0db85", detail: "Singles & doubles knockout", participants: 40, matches: 28, stage: "Round of 16" },
+  { slug: "carrom", name: "Carrom", icon: "◉", category: "Indoor", color: "#f0db85", detail: "🏆 Champion: Arnob Sabit & Najmul · 🥈 Runner-Up: Tareq & Sajeeb", participants: 40, matches: 3, stage: "Completed" },
   { slug: "twenty-nine", name: "29 Card", icon: "♠️", category: "Indoor", color: "#60a5fa", detail: "10-Round team matches · Room 830, IICT", participants: 20, matches: 5, stage: "Round 1" },
   { slug: "29", name: "29", icon: "♠️", category: "Indoor", color: "#ff8f9b", detail: "10-Round team matches · Room 830, IICT", participants: 20, matches: 5, stage: "Round 1" },
   { slug: "big-two", name: "Big-2", icon: "♥️", category: "Indoor", color: "#f43f5e", detail: "8-Round lowest-scorer advances", participants: 0, matches: 0, stage: "Registration" },
